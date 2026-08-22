@@ -48,7 +48,7 @@ class SREAgent:
 
     def command(self, command: str) -> str:
         """Return a plain-text response for a Telegram command."""
-        if command == "/daily_report":
+        if command == "/report":
             stats = self.history.get_last_24_hours()
             telemetry = self.collector.collect_telemetry(stats)
             verdict = self.ollama.ask(

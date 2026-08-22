@@ -14,7 +14,7 @@ from .integrations import TelegramNotifier
 
 COMMANDS = {
     "/status": "Estado general del servidor",
-    "/daily_report": "Reporte diario",
+    "/report": "Reporte diario",
     "/cpu": "CPU, temperatura y RAM",
     "/gpu": "Temperatura y uso de GPU",
     "/disks": "Uso de discos",
