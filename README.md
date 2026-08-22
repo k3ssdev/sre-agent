@@ -25,7 +25,6 @@ Agente autónomo de observabilidad y fiabilidad (SRE) para servidores Linux. Rec
 sudo apt update
 sudo apt install -y python3 python3-docker python3-psutil python3-requests smartmontools
 ```
-````
 
 ### 2. Dependencias Python
 
