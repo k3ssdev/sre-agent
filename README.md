@@ -62,14 +62,22 @@ cp .env.example .env
 Edita `.env` con tus valores:
 
 ```dotenv
+SRE_PROVIDER=ollama
 OLLAMA_URL=http://localhost:11434/api/generate
 OLLAMA_MODEL=qwen2.5-coder:7b
+OPENSRE_COMMAND=~/.local/bin/opensre
+OPENSRE_TIMEOUT=120
 TELEGRAM_TOKEN=TU_BOT_TOKEN
 TELEGRAM_CHAT_ID=TU_CHAT_ID
 SRE_HISTORY_FILE=~/.config/server_metrics_history.csv
 ```
 
 El fichero `.env` contiene credenciales y no debe versionarse.
+
+`SRE_PROVIDER` controla el análisis de alertas y acepta `ollama` u `opensre`. Con
+`opensre`, el agente crea un JSON temporal con la alerta y ejecuta
+`OPENSRE_COMMAND investigate -i <archivo>`. Los reportes diarios y los comandos
+de Telegram siguen usando Ollama. `OPENSRE_TIMEOUT` está expresado en segundos.
 
 El script está organizado por responsabilidades: `InfrastructureCollector` recopila telemetría, `HistoryRepository` persiste muestras, `AlertEvaluator` aplica umbrales, y `OllamaClient`/`TelegramNotifier` integran servicios externos. `SREAgent` coordina los casos de uso y `main()` solo procesa la CLI.
 

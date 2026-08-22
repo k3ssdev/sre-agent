@@ -23,8 +23,11 @@ load_env_file(Path(__file__).resolve().parents[2] / ".env")
 
 @dataclass(frozen=True)
 class Settings:
+    sre_provider: str = field(default_factory=lambda: os.getenv("SRE_PROVIDER", "ollama").strip().lower())
     ollama_url: str = field(default_factory=lambda: os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate"))
     model_name: str = field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b"))
+    opensre_command: str = field(default_factory=lambda: os.getenv("OPENSRE_COMMAND", "/home/alberto/.local/bin/opensre"))
+    opensre_timeout: int = field(default_factory=lambda: int(os.getenv("OPENSRE_TIMEOUT", "120")))
     telegram_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_TOKEN", ""))
     telegram_chat_id: str = field(default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", ""))
     history_file: Path = field(default_factory=lambda: Path(os.path.expanduser(os.getenv("SRE_HISTORY_FILE", "~/.config/server_metrics_history.csv"))))

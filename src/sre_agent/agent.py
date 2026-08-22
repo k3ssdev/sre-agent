@@ -9,7 +9,7 @@ from .alerts import AlertEvaluator
 from .collectors import InfrastructureCollector
 from .config import Settings
 from .history import HistoryRepository
-from .integrations import OllamaClient, TelegramNotifier
+from .integrations import InvestigationClient, TelegramNotifier
 from .reporting import format_alert_report, get_status_icon, make_bar, strip_markdown
 
 
@@ -19,7 +19,7 @@ class SREAgent:
         self.collector = InfrastructureCollector()
         self.history = HistoryRepository(settings.history_file)
         self.evaluator = AlertEvaluator(settings.thresholds)
-        self.ollama = OllamaClient(settings)
+        self.investigator = InvestigationClient(settings)
         self.telegram = TelegramNotifier(settings)
 
     def run(self) -> None:
@@ -38,16 +38,16 @@ class SREAgent:
         if not alerts:
             print("\nSistema nominal: sin alertas que enviar.")
             return
-        print(f"\nDisparando análisis con Ollama ({self.settings.model_name})...")
+        print(f"\nDisparando análisis con {self.settings.sre_provider}...")
         prompt = ("Eres un agente SRE de Linux. Analiza la siguiente telemetría donde se han detectado anomalías. " "Genera un reporte conciso de 3-4 líneas en texto plano: causa raíz, severidad y comando sugerido. No uses Markdown.\n\n" f"Anomalías detectadas: {alerts}\nTelemetría del equipo:\n{json.dumps(telemetry, indent=2)}")
-        diagnosis = self.ollama.ask(prompt, "Sin respuesta de Ollama")
+        diagnosis = self.investigator.investigate(alerts, telemetry, prompt, "Sin respuesta del proveedor SRE")
         self.telegram.send(format_alert_report(alerts, diagnosis), parse_mode=None)
 
     def daily_report(self) -> None:
         stats = self.history.get_last_24_hours()
         telemetry = self.collector.collect_telemetry(stats)
         prompt = ("Eres un agente SRE de Linux. Explica en lenguaje natural el estado general del servidor " "en 1 o 2 frases, mencionando solo lo más relevante de las últimas 24 horas. No repitas la telemetría, " "no uses listas, código ni Markdown.\n\nTelemetría actual y estadísticas 24h:\n" f"{json.dumps(telemetry, indent=2)}")
-        verdict = self.ollama.ask(prompt, "Servicios operando dentro de los parámetros esperados en las últimas 24 horas.")
+        verdict = self.investigator.ask(prompt, "Servicios operando dentro de los parámetros esperados en las últimas 24 horas.")
         verdict = strip_markdown(verdict)
         self.telegram.send(self._format_report(telemetry, verdict))
         print("Reporte diario visual enviado con éxito a Telegram.")
@@ -57,7 +57,7 @@ class SREAgent:
         if command == "/report":
             stats = self.history.get_last_24_hours()
             telemetry = self.collector.collect_telemetry(stats)
-            verdict = self.ollama.ask(
+            verdict = self.investigator.ask(
                 "Explica en lenguaje natural el estado del servidor en una o dos frases. "
                 "Menciona solo lo más relevante, sin repetir datos, listas, código ni Markdown:\n"
                 + json.dumps(telemetry, indent=2),

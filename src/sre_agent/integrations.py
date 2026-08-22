@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import tempfile
+
 import requests
 
 from .config import Settings
@@ -18,6 +22,50 @@ class OllamaClient:
             return response.json().get("response", fallback)
         except (requests.RequestException, ValueError, KeyError):
             return fallback
+
+
+class InvestigationClient:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self.ollama = OllamaClient(settings)
+
+    def investigate(self, alert_reasons: list[str], telemetry: dict, prompt: str, fallback: str) -> str:
+        if self.settings.sre_provider == "opensre":
+            return self._investigate_with_opensre(alert_reasons, telemetry, fallback)
+        return self.ollama.ask(prompt, fallback)
+
+    def ask(self, prompt: str, fallback: str) -> str:
+        return self.ollama.ask(prompt, fallback)
+
+    def _investigate_with_opensre(self, alert_reasons: list[str], telemetry: dict, fallback: str) -> str:
+        alert_payload = {
+            "status": "firing",
+            "labels": {
+                "alertname": "AnomaliaServidor",
+                "host": "servidor-b150m",
+                "severity": "critical",
+            },
+            "annotations": {
+                "description": " | ".join(alert_reasons),
+                "telemetry": json.dumps(telemetry, ensure_ascii=False),
+            },
+        }
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", encoding="utf-8") as alert_file:
+                json.dump(alert_payload, alert_file, ensure_ascii=False)
+                alert_file.flush()
+                result = subprocess.run(
+                    [self.settings.opensre_command, "investigate", "-i", alert_file.name],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.settings.opensre_timeout,
+                    check=False,
+                )
+            if result.returncode != 0:
+                return f"Error al ejecutar OpenSRE: {result.stderr.strip() or result.returncode}"
+            return result.stdout.strip() or fallback
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return f"Error al ejecutar OpenSRE: {error}"
 
 
 class TelegramNotifier:
