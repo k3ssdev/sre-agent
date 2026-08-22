@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
 from .alerts import AlertEvaluator
@@ -11,7 +10,7 @@ from .collectors import InfrastructureCollector
 from .config import Settings
 from .history import HistoryRepository
 from .integrations import OllamaClient, TelegramNotifier
-from .reporting import format_alert_report, get_status_icon, make_bar
+from .reporting import format_alert_report, get_status_icon, make_bar, strip_markdown
 
 
 class SREAgent:
@@ -28,7 +27,14 @@ class SREAgent:
         self.history.record(resources)
         telemetry = {"resources": resources, "disks": self.collector.collect_disks(), "smart_health": self.collector.collect_smart(), "containers": self.collector.collect_containers(), "updates": self.collector.collect_updates()}
         alerts = self.evaluator.evaluate(telemetry)
-        print("Telemetría:", json.dumps(telemetry, indent=2))
+        print(
+            "Telemetría recopilada: "
+            f"CPU {resources['cpu_load_percent']}%, "
+            f"RAM {resources['ram_used_percent']}%, "
+            f"discos {len(telemetry['disks'])}, "
+            f"contenedores {len(telemetry['containers'])}, "
+            f"alertas {len(alerts)}"
+        )
         if not alerts:
             print("\nSistema nominal: sin alertas que enviar.")
             return
@@ -40,9 +46,9 @@ class SREAgent:
     def daily_report(self) -> None:
         stats = self.history.get_last_24_hours()
         telemetry = self.collector.collect_telemetry(stats)
-        prompt = ("Eres un agente SRE de Linux. Escribe un veredicto de estado general de 1 o 2 líneas resumiendo " f"las últimas 24h sin listas ni código.\n\nTelemetría actual y estadísticas 24h:\n{json.dumps(telemetry, indent=2)}")
+        prompt = ("Eres un agente SRE de Linux. Explica en lenguaje natural el estado general del servidor " "en 1 o 2 frases, mencionando solo lo más relevante de las últimas 24 horas. No repitas la telemetría, " "no uses listas, código ni Markdown.\n\nTelemetría actual y estadísticas 24h:\n" f"{json.dumps(telemetry, indent=2)}")
         verdict = self.ollama.ask(prompt, "Servicios operando dentro de los parámetros esperados en las últimas 24 horas.")
-        verdict = re.sub(r"```[a-zA-Z]*", "", verdict).replace("```", "").strip()
+        verdict = strip_markdown(verdict)
         self.telegram.send(self._format_report(telemetry, verdict))
         print("Reporte diario visual enviado con éxito a Telegram.")
 
@@ -52,11 +58,12 @@ class SREAgent:
             stats = self.history.get_last_24_hours()
             telemetry = self.collector.collect_telemetry(stats)
             verdict = self.ollama.ask(
-                "Resume esta telemetría SRE en una o dos líneas, sin Markdown:\n"
+                "Explica en lenguaje natural el estado del servidor en una o dos frases. "
+                "Menciona solo lo más relevante, sin repetir datos, listas, código ni Markdown:\n"
                 + json.dumps(telemetry, indent=2),
                 "Servicios operando dentro de los parámetros esperados.",
             )
-            return self._format_plain_report(telemetry, verdict)
+            return self._format_plain_report(telemetry, strip_markdown(verdict))
 
         if command == "/status":
             telemetry = self.collector.collect_telemetry()
