@@ -162,12 +162,29 @@ _{verdict}_"""
     def _format_info(info: dict[str, Any], hostname: str) -> str:
         system, cpu = info["system"], info["cpu"]
         memory, gpu = info["memory"], info["gpu"]
-        gpu_text = f"{gpu.get('name')} ({gpu.get('memory_total_mb')} MB, driver {gpu.get('driver')})" if gpu.get("name") else "No disponible"
+        if gpu.get("name"):
+            gpu_memory = int(gpu.get("memory_total_mb", 0))
+            gpu_text = f"`{gpu['name']}`\n  *VRAM:* `{gpu_memory} MB`\n  *Driver:* `{gpu.get('driver', 'N/A')}`"
+        else:
+            gpu_text = "`No disponible`"
+        disk_lines = "\n".join(f"• *{name}:* `{value}%`" for name, value in info["disks"].items()) or "• No detectados"
         return (
-            f"🖥️ INFORMACIÓN DEL SISTEMA: {hostname}\n━━━━━━━━━━━━━━━━━━━━\n"
-            f"SO: {system['os']}\nKernel: {system['kernel']}\nArquitectura: {system['architecture']}\n"
-            f"Procesador: {system['processor']}\nCPU: {cpu['physical_cores']} físicos / {cpu['logical_cores']} lógicos\n"
-            f"Frecuencia máxima: {cpu['frequency_mhz']} MHz\nRAM total: {memory['total_gb']} GB\nGPU: {gpu_text}\n"
-            f"Discos: {', '.join(f'{name} {value}%' for name, value in info['disks'].items())}\n"
-            f"Contenedores Docker: {info['docker_containers']}"
+            "🖥️ *INFORMACIÓN DEL EQUIPO*\n"
+            f"📍 *Hostname:* `{hostname}`\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "🧩 *SISTEMA*\n"
+            f"• *SO:* `{system['os']}`\n"
+            f"• *Kernel:* `{system['kernel']}`\n"
+            f"• *Arquitectura:* `{system['architecture']}`\n"
+            f"• *Procesador:* `{system['processor']}`\n\n"
+            "⚙️ *CPU Y MEMORIA*\n"
+            f"• *Núcleos:* `{cpu['physical_cores']} físicos / {cpu['logical_cores']} lógicos`\n"
+            f"• *Frecuencia máxima:* `{cpu['frequency_mhz']} MHz`\n"
+            f"• *RAM total:* `{memory['total_gb']} GB`\n\n"
+            "🎮 *GRÁFICOS*\n"
+            f"• *GPU:* {gpu_text}\n\n"
+            "💾 *ALMACENAMIENTO*\n"
+            f"{disk_lines}\n\n"
+            "🐳 *DOCKER*\n"
+            f"• *Contenedores:* `{info['docker_containers']}`"
         )
