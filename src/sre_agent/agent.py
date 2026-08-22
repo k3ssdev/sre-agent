@@ -42,7 +42,7 @@ class SREAgent:
         print(f"\nDisparando análisis con {self.settings.sre_provider}...")
         prompt = ("Eres un agente SRE de Linux. Analiza la siguiente telemetría donde se han detectado anomalías. " "Genera un reporte conciso de 3-4 líneas en texto plano: causa raíz, severidad y comando sugerido. No uses Markdown.\n\n" f"Anomalías detectadas: {alerts}\nTelemetría del equipo:\n{json.dumps(telemetry, indent=2)}")
         diagnosis = self.investigator.investigate(alerts, telemetry, prompt, "Sin respuesta del proveedor SRE")
-        self.telegram.send(format_alert_report(alerts, diagnosis, self.hostname), parse_mode=None)
+        self.telegram.send(format_alert_report(alerts, diagnosis, self.hostname), parse_mode="Markdown")
 
     def daily_report(self) -> None:
         stats = self.history.get_last_24_hours()
@@ -75,19 +75,19 @@ class SREAgent:
 
         resources = self.collector.collect_resources()
         if command == "/cpu":
-            return f"🧠 CPU - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\nCarga: {resources['cpu_load_percent']}%\nTemperatura: {resources['cpu_temp_c']}°C\nRAM: {resources['ram_used_percent']}%"
+            return f"🧠 *CPU - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n• *Carga:* `{resources['cpu_load_percent']}%`\n• *Temperatura:* `{resources['cpu_temp_c']}°C`\n• *RAM:* `{resources['ram_used_percent']}%`"
         if command == "/gpu":
             gpu = resources.get("gpu", {})
-            return f"🎮 GPU - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\nTemperatura: {gpu.get('temp_c', 'N/A')}°C\nVRAM: {gpu.get('vram_used_mb', 0)} / {gpu.get('vram_total_mb', 0)} MB\nUso: {gpu.get('util_percent', 'N/A')}%"
+            return f"🎮 *GPU - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n• *Temperatura:* `{gpu.get('temp_c', 'N/A')}°C`\n• *VRAM:* `{gpu.get('vram_used_mb', 0)} / {gpu.get('vram_total_mb', 0)} MB`\n• *Uso:* `{gpu.get('util_percent', 'N/A')}%`"
         if command == "/disks":
             disks = self.collector.collect_disks()
-            lines = [f"💾 {name}: {make_bar(value)} {value}% {get_status_icon(value)}" for name, value in disks.items()]
-            return f"💾 DISCOS - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines)
+            lines = [f"• *{name}:* `{make_bar(value)} {value}%` {get_status_icon(value)}" for name, value in disks.items()]
+            return f"💾 *DISCOS - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines)
         if command == "/docker":
             containers = self.collector.collect_containers()
-            lines = [f"{'🟢' if data['running'] else '🔴'} {name}: {data['status']}" for name, data in containers.items()]
-            return f"🐳 DOCKER - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
-        return f"{self.hostname}: comando no reconocido. Usa /help para ver los comandos disponibles."
+            lines = [f"{'🟢' if data['running'] else '🔴'} *{name}:* `{data['status']}`" for name, data in containers.items()]
+            return f"🐳 *DOCKER - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
+        return f"*{self.hostname}:* comando no reconocido. Usa /help para ver los comandos disponibles."
 
     @staticmethod
     def _format_status(telemetry: dict[str, Any], hostname: str) -> str:
@@ -95,13 +95,13 @@ class SREAgent:
         alerts = AlertEvaluator({"cpu_temp": 80, "gpu_temp": 82, "disk_percent": 90}).evaluate(telemetry)
         state = "🔴 CON ALERTAS" if alerts else "🟢 SISTEMA NOMINAL"
         return (
-            f"📊 ESTADO DEL SERVIDOR: {hostname}\n━━━━━━━━━━━━━━━━━━━━\n{state}\n\n"
-            f"CPU: {resources['cpu_load_percent']}% | {resources['cpu_temp_c']}°C\n"
-            f"RAM: {resources['ram_used_percent']}%\n"
-            f"GPU: {resources.get('gpu', {}).get('temp_c', 'N/A')}°C\n"
-            f"Discos: {len(telemetry['disks'])} comprobados\n"
-            f"Docker: {len(telemetry['containers'])} contenedores\n"
-            f"Alertas: {len(alerts)}"
+            f"📊 *ESTADO DEL SERVIDOR: {hostname}*\n━━━━━━━━━━━━━━━━━━━━\n{state}\n\n"
+            f"• *CPU:* `{resources['cpu_load_percent']}%` | `{resources['cpu_temp_c']}°C`\n"
+            f"• *RAM:* `{resources['ram_used_percent']}%`\n"
+            f"• *GPU:* `{resources.get('gpu', {}).get('temp_c', 'N/A')}°C`\n"
+            f"• *Discos comprobados:* `{len(telemetry['disks'])}`\n"
+            f"• *Contenedores Docker:* `{len(telemetry['containers'])}`\n"
+            f"• *Alertas:* `{len(alerts)}`"
         )
 
     @staticmethod
@@ -110,16 +110,16 @@ class SREAgent:
         disks = telemetry["disks"]
         gpu = resources.get("gpu", {})
         containers = telemetry["containers"]
-        docker_status = "\n".join(f"{'🟢' if data.get('running') else '🔴'} {name}" for name, data in containers.items()) or "Sin contenedores"
+        docker_status = "\n".join(f"{'🟢' if data.get('running') else '🔴'} `{name}`" for name, data in containers.items()) or "Sin contenedores"
         return (
-            f"📊 REPORTE DIARIO DEL SERVIDOR: {hostname}\n━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🧠 ESTADO ACTUAL\nCPU {make_bar(resources.get('cpu_load_percent', 0))} {resources.get('cpu_load_percent', 0)}% ({resources.get('cpu_temp_c', 0)}°C)\n"
-            f"RAM {make_bar(resources.get('ram_used_percent', 0))} {resources.get('ram_used_percent', 0)}% ({resources.get('ram_used_gb', 0)} GB)\n\n"
-            f"🎮 GPU\nTemperatura: {gpu.get('temp_c', 'N/A')}°C | VRAM: {gpu.get('vram_used_mb', 0)} MB\n\n"
-            "💾 ALMACENAMIENTO\n"
-            + "\n".join(f"{name}: {make_bar(value)} {value}% {get_status_icon(value)}" for name, value in disks.items())
-            + f"\n\n🐳 DOCKER\n{docker_status}\n\n📦 ACTUALIZACIONES\n{telemetry['updates'].get('pending_updates', 0)} pendientes\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n💡 DIAGNÓSTICO SRE\n{verdict.strip()}"
+            f"📊 *REPORTE DIARIO DEL SERVIDOR: {hostname}*\n━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🧠 *ESTADO ACTUAL*\n• *CPU:* `{make_bar(resources.get('cpu_load_percent', 0))} {resources.get('cpu_load_percent', 0)}% ({resources.get('cpu_temp_c', 0)}°C)`\n"
+            f"• *RAM:* `{make_bar(resources.get('ram_used_percent', 0))} {resources.get('ram_used_percent', 0)}% ({resources.get('ram_used_gb', 0)} GB)`\n\n"
+            f"🎮 *GPU*\n• *Temperatura:* `{gpu.get('temp_c', 'N/A')}°C` | *VRAM:* `{gpu.get('vram_used_mb', 0)} MB`\n\n"
+            "💾 *ALMACENAMIENTO*\n"
+            + "\n".join(f"• *{name}:* `{make_bar(value)} {value}%` {get_status_icon(value)}" for name, value in disks.items())
+            + f"\n\n🐳 *DOCKER*\n{docker_status}\n\n📦 *ACTUALIZACIONES*\n• *Pendientes:* `{telemetry['updates'].get('pending_updates', 0)}`\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n💡 *DIAGNÓSTICO SRE*\n{verdict.strip()}"
         )
 
     @staticmethod

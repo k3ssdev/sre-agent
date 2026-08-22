@@ -32,14 +32,14 @@ def get_hostname() -> str:
 
 def format_alert_report(alerts: list[str], diagnosis: str, hostname: str | None = None) -> str:
     """Build an alert message without Markdown formatting."""
-    alert_lines = "\n".join(f"🔴 {alert}" for alert in alerts)
+    alert_lines = "\n".join(f"🔴 *Alerta:* `{alert}`" for alert in alerts)
     return (
-        f"🚨 ALERTA SERVIDOR: {hostname or get_hostname()}\n"
+        f"🚨 *ALERTA SERVIDOR: {hostname or get_hostname()}*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "ESTADO\n"
+        "*ESTADO*\n"
         f"{alert_lines}\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "DIAGNÓSTICO OLLAMA\n"
+        "*DIAGNÓSTICO SRE*\n"
         f"{strip_markdown(diagnosis)}"
     )
 

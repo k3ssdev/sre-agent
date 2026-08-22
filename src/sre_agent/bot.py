@@ -61,7 +61,7 @@ class TelegramBot:
         if not text:
             return
         if text == "/help":
-            response = f"🤖 COMANDOS SRE - {get_hostname()}\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(f"{command} - {description}" for command, description in COMMANDS.items())
+            response = f"🤖 *COMANDOS SRE - {get_hostname()}*\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(f"`{command}` - {description}" for command, description in COMMANDS.items())
         else:
             response = self.agent.command(text)
-        self.notifier.send_to_chat(chat_id, response, parse_mode="Markdown" if text == "/info" else None)
+        self.notifier.send_to_chat(chat_id, response, parse_mode="Markdown")
