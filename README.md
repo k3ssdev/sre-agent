@@ -17,7 +17,7 @@ Agente autónomo de observabilidad y fiabilidad (SRE) para servidores Linux. Rec
 
 - **OS:** Pop!\_OS / Ubuntu / Debian-based
 - **Hardware:** GPU NVIDIA con drivers operativos (`nvidia-smi`)
-- **Servicios:** Docker y Ollama en ejecución
+- **Servicios:** Ollama en ejecución; Docker es necesario para consultar contenedores
 
 ### 1. Paquetes del Sistema
 
@@ -32,7 +32,9 @@ Las dependencias se instalan desde los paquetes del sistema para evitar modifica
 el entorno Python gestionado por Debian/Ubuntu. Los paquetes necesarios están
 incluidos en el comando de la sección anterior.
 
-Además, deben estar instalados y activos Docker y Ollama. `smartmontools` aporta
+Además, Ollama debe estar instalado y activo. Docker aporta la consulta de
+contenedores, pero el agente continúa funcionando si el daemon no está activo.
+`smartmontools` aporta
 `smartctl`; `lsblk` pertenece normalmente a `util-linux`, y `nvidia-smi` requiere
 los controladores NVIDIA correspondientes. El agente necesita acceso al socket
 de Docker y permisos `sudoers` para ejecutar `smartctl` sin contraseña.
@@ -97,26 +99,23 @@ El bot de Telegram permite consultar el servidor con estos comandos:
 
 ### 3. Despliegue de Servicios y Timers (`systemd`)
 
+El script instala los servicios, crea el fichero de entorno con la ruta del
+proyecto, recarga `systemd` y activa los timers y el bot:
+
 ```bash
-# Crear directorio de servicios de usuario si no existe
-mkdir -p ~/.config/systemd/user
+./scripts/setup-systemd.sh
+```
 
-# Copiar archivos systemd
-cp systemd/* ~/.config/systemd/user/
+Para comprobar el token de Telegram y que el servicio esté activo:
 
-# Indicar dónde está clonado el proyecto (puede ser cualquier ruta)
-mkdir -p ~/.config/sre-agent
-printf 'SRE_AGENT_DIR=%s\n' "$PWD" > ~/.config/sre-agent/environment
+```bash
+./scripts/setup-systemd.sh --test-bot
+```
 
-# Recargar daemons y habilitar temporizadores
-systemctl --user daemon-reload
-systemctl --user enable --now ollama-agent.timer
-systemctl --user enable --now ollama-daily-report.timer
-systemctl --user enable --now ollama-telegram-bot.service
+Para mantener los servicios activos aunque cierres la sesión:
 
-# Habilitar persistencia de procesos tras cerrar sesión
-loginctl enable-linger $USER
-
+```bash
+loginctl enable-linger "$USER"
 ```
 
 Los servicios leen la ruta del proyecto desde `~/.config/sre-agent/environment`,
@@ -173,6 +172,24 @@ journalctl --user -u ollama-telegram-bot.service -n 50 --no-pager
 
 ```
 
+### Pruebas manuales
+
+`manual-test.py` permite ejecutar funciones concretas sin iniciar el polling
+infinito del bot:
+
+```bash
+python3 scripts/manual-test.py config
+python3 scripts/manual-test.py collect
+python3 scripts/manual-test.py alerts
+python3 scripts/manual-test.py ollama
+python3 scripts/manual-test.py opensre
+python3 scripts/manual-test.py command --command /status
+```
+
+La prueba `opensre` fuerza ese proveedor aunque `SRE_PROVIDER=ollama`. Las
+pruebas de recolección necesitan las dependencias Python y, para consultar
+contenedores, un daemon Docker accesible.
+
 ---
 
 ## 📂 Estructura del Repositorio
@@ -192,6 +209,9 @@ journalctl --user -u ollama-telegram-bot.service -n 50 --no-pager
 │       └── reporting.py          # Formateo de reportes
 ├── pyproject.toml                # Metadatos y dependencias del paquete
 ├── .env.example                  # Plantilla de configuración
+├── scripts/
+│   ├── setup-systemd.sh          # Instala y prueba los servicios de usuario
+│   └── manual-test.py             # Ejecuta funciones manualmente
 ├── systemd/
 │   ├── ollama-agent.service     # Servicio de comprobación periódica
 │   ├── ollama-agent.timer       # Temporizador cada 10 minutos

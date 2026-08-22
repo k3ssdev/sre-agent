@@ -43,8 +43,12 @@ class InfrastructureCollector:
 
     @staticmethod
     def collect_containers() -> dict[str, dict[str, Any]]:
-        client = docker.from_env()
-        return {container.name: {"status": container.status, "image": container.image.tags[0] if container.image.tags else "unknown", "running": container.status == "running"} for container in client.containers.list(all=True)}
+        try:
+            client = docker.from_env()
+            return {container.name: {"status": container.status, "image": container.image.tags[0] if container.image.tags else "unknown", "running": container.status == "running"} for container in client.containers.list(all=True)}
+        except docker.errors.DockerException as error:
+            print(f"Docker no disponible; se omite la comprobación de contenedores: {error}")
+            return {}
 
     @staticmethod
     def collect_updates() -> dict[str, int]:
