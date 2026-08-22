@@ -11,7 +11,7 @@ from .collectors import InfrastructureCollector
 from .config import Settings
 from .history import HistoryRepository
 from .integrations import OllamaClient, TelegramNotifier
-from .reporting import get_status_icon, make_bar
+from .reporting import format_alert_report, get_status_icon, make_bar
 
 
 class SREAgent:
@@ -33,10 +33,9 @@ class SREAgent:
             print("\nSistema nominal: sin alertas que enviar.")
             return
         print(f"\nDisparando análisis con Ollama ({self.settings.model_name})...")
-        prompt = ("Eres un agente SRE de Linux. Analiza la siguiente telemetría donde se han detectado anomalías. " "Genera un reporte conciso de 3-4 líneas en Markdown: causa raíz, severidad y comando sugerido.\n\n" f"Anomalías detectadas: {alerts}\nTelemetría del equipo:\n{json.dumps(telemetry, indent=2)}")
+        prompt = ("Eres un agente SRE de Linux. Analiza la siguiente telemetría donde se han detectado anomalías. " "Genera un reporte conciso de 3-4 líneas en texto plano: causa raíz, severidad y comando sugerido. No uses Markdown.\n\n" f"Anomalías detectadas: {alerts}\nTelemetría del equipo:\n{json.dumps(telemetry, indent=2)}")
         diagnosis = self.ollama.ask(prompt, "Sin respuesta de Ollama")
-        message = "🚨 *ALERTA SERVIDOR*\n\n" + "\n".join(f"• {alert}" for alert in alerts)
-        self.telegram.send(f"{message}\n\n*Diagnóstico Ollama:*\n{diagnosis}")
+        self.telegram.send(format_alert_report(alerts, diagnosis), parse_mode=None)
 
     def daily_report(self) -> None:
         stats = self.history.get_last_24_hours()
