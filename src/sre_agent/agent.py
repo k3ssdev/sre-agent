@@ -10,7 +10,7 @@ from .collectors import InfrastructureCollector
 from .config import Settings
 from .history import HistoryRepository
 from .integrations import InvestigationClient, TelegramNotifier
-from .reporting import format_alert_report, get_status_icon, make_bar, strip_markdown
+from .reporting import format_alert_report, get_hostname, get_status_icon, make_bar, strip_markdown
 
 
 class SREAgent:
@@ -21,6 +21,7 @@ class SREAgent:
         self.evaluator = AlertEvaluator(settings.thresholds)
         self.investigator = InvestigationClient(settings)
         self.telegram = TelegramNotifier(settings)
+        self.hostname = get_hostname()
 
     def run(self) -> None:
         resources = self.collector.collect_resources()
@@ -41,7 +42,7 @@ class SREAgent:
         print(f"\nDisparando análisis con {self.settings.sre_provider}...")
         prompt = ("Eres un agente SRE de Linux. Analiza la siguiente telemetría donde se han detectado anomalías. " "Genera un reporte conciso de 3-4 líneas en texto plano: causa raíz, severidad y comando sugerido. No uses Markdown.\n\n" f"Anomalías detectadas: {alerts}\nTelemetría del equipo:\n{json.dumps(telemetry, indent=2)}")
         diagnosis = self.investigator.investigate(alerts, telemetry, prompt, "Sin respuesta del proveedor SRE")
-        self.telegram.send(format_alert_report(alerts, diagnosis), parse_mode=None)
+        self.telegram.send(format_alert_report(alerts, diagnosis, self.hostname), parse_mode=None)
 
     def daily_report(self) -> None:
         stats = self.history.get_last_24_hours()
@@ -49,7 +50,7 @@ class SREAgent:
         prompt = ("Eres un agente SRE de Linux. Explica en lenguaje natural el estado general del servidor " "en 1 o 2 frases, mencionando solo lo más relevante de las últimas 24 horas. No repitas la telemetría, " "no uses listas, código ni Markdown.\n\nTelemetría actual y estadísticas 24h:\n" f"{json.dumps(telemetry, indent=2)}")
         verdict = self.investigator.ask(prompt, "Servicios operando dentro de los parámetros esperados en las últimas 24 horas.")
         verdict = strip_markdown(verdict)
-        self.telegram.send(self._format_report(telemetry, verdict))
+        self.telegram.send(self._format_report(telemetry, verdict, self.hostname))
         print("Reporte diario visual enviado con éxito a Telegram.")
 
     def command(self, command: str) -> str:
@@ -63,35 +64,38 @@ class SREAgent:
                 + json.dumps(telemetry, indent=2),
                 "Servicios operando dentro de los parámetros esperados.",
             )
-            return self._format_plain_report(telemetry, strip_markdown(verdict))
+            return self._format_plain_report(telemetry, strip_markdown(verdict), self.hostname)
 
         if command == "/status":
             telemetry = self.collector.collect_telemetry()
-            return self._format_status(telemetry)
+            return self._format_status(telemetry, self.hostname)
+
+        if command == "/info":
+            return self._format_info(self.collector.collect_system_info(), self.hostname)
 
         resources = self.collector.collect_resources()
         if command == "/cpu":
-            return f"🧠 CPU\n━━━━━━━━━━━━━━━━━━━━\nCarga: {resources['cpu_load_percent']}%\nTemperatura: {resources['cpu_temp_c']}°C\nRAM: {resources['ram_used_percent']}%"
+            return f"🧠 CPU - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\nCarga: {resources['cpu_load_percent']}%\nTemperatura: {resources['cpu_temp_c']}°C\nRAM: {resources['ram_used_percent']}%"
         if command == "/gpu":
             gpu = resources.get("gpu", {})
-            return f"🎮 GPU\n━━━━━━━━━━━━━━━━━━━━\nTemperatura: {gpu.get('temp_c', 'N/A')}°C\nVRAM: {gpu.get('vram_used_mb', 0)} / {gpu.get('vram_total_mb', 0)} MB\nUso: {gpu.get('util_percent', 'N/A')}%"
+            return f"🎮 GPU - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\nTemperatura: {gpu.get('temp_c', 'N/A')}°C\nVRAM: {gpu.get('vram_used_mb', 0)} / {gpu.get('vram_total_mb', 0)} MB\nUso: {gpu.get('util_percent', 'N/A')}%"
         if command == "/disks":
             disks = self.collector.collect_disks()
             lines = [f"💾 {name}: {make_bar(value)} {value}% {get_status_icon(value)}" for name, value in disks.items()]
-            return "💾 DISCOS\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines)
+            return f"💾 DISCOS - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines)
         if command == "/docker":
             containers = self.collector.collect_containers()
             lines = [f"{'🟢' if data['running'] else '🔴'} {name}: {data['status']}" for name, data in containers.items()]
-            return "🐳 DOCKER\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
-        return "Comando no reconocido. Usa /help para ver los comandos disponibles."
+            return f"🐳 DOCKER - {self.hostname}\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
+        return f"{self.hostname}: comando no reconocido. Usa /help para ver los comandos disponibles."
 
     @staticmethod
-    def _format_status(telemetry: dict[str, Any]) -> str:
+    def _format_status(telemetry: dict[str, Any], hostname: str) -> str:
         resources = telemetry["resources"]
         alerts = AlertEvaluator({"cpu_temp": 80, "gpu_temp": 82, "disk_percent": 90}).evaluate(telemetry)
         state = "🔴 CON ALERTAS" if alerts else "🟢 SISTEMA NOMINAL"
         return (
-            f"📊 ESTADO DEL SERVIDOR\n━━━━━━━━━━━━━━━━━━━━\n{state}\n\n"
+            f"📊 ESTADO DEL SERVIDOR: {hostname}\n━━━━━━━━━━━━━━━━━━━━\n{state}\n\n"
             f"CPU: {resources['cpu_load_percent']}% | {resources['cpu_temp_c']}°C\n"
             f"RAM: {resources['ram_used_percent']}%\n"
             f"GPU: {resources.get('gpu', {}).get('temp_c', 'N/A')}°C\n"
@@ -101,14 +105,14 @@ class SREAgent:
         )
 
     @staticmethod
-    def _format_plain_report(telemetry: dict[str, Any], verdict: str) -> str:
+    def _format_plain_report(telemetry: dict[str, Any], verdict: str, hostname: str) -> str:
         resources = telemetry["resources"]
         disks = telemetry["disks"]
         gpu = resources.get("gpu", {})
         containers = telemetry["containers"]
         docker_status = "\n".join(f"{'🟢' if data.get('running') else '🔴'} {name}" for name, data in containers.items()) or "Sin contenedores"
         return (
-            "📊 REPORTE DIARIO DEL SERVIDOR\n━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📊 REPORTE DIARIO DEL SERVIDOR: {hostname}\n━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🧠 ESTADO ACTUAL\nCPU {make_bar(resources.get('cpu_load_percent', 0))} {resources.get('cpu_load_percent', 0)}% ({resources.get('cpu_temp_c', 0)}°C)\n"
             f"RAM {make_bar(resources.get('ram_used_percent', 0))} {resources.get('ram_used_percent', 0)}% ({resources.get('ram_used_gb', 0)} GB)\n\n"
             f"🎮 GPU\nTemperatura: {gpu.get('temp_c', 'N/A')}°C | VRAM: {gpu.get('vram_used_mb', 0)} MB\n\n"
@@ -119,7 +123,7 @@ class SREAgent:
         )
 
     @staticmethod
-    def _format_report(telemetry: dict[str, Any], verdict: str) -> str:
+    def _format_report(telemetry: dict[str, Any], verdict: str, hostname: str) -> str:
         resources, disks = telemetry["resources"], telemetry["disks"]
         gpu, stats = resources.get("gpu", {}), telemetry.get("stats_24h")
         smart_failed = any(isinstance(info, dict) and not info.get("health_passed", True) for info in telemetry["smart_health"].values())
@@ -127,7 +131,7 @@ class SREAgent:
         if stats:
             history = (f"\n📈 *MÉTRICAS 24H ({stats['samples']} muestras)*\n" f"• `CPU Carga` Min {stats['cpu_load'][0]:.1f}% | Avg {stats['cpu_load'][2]:.1f}% | Max *{stats['cpu_load'][1]:.1f}%*\n" f"• `CPU Temp` Min {stats['cpu_temp'][0]:.1f}°C | Avg {stats['cpu_temp'][2]:.1f}°C | Max *{stats['cpu_temp'][1]:.1f}°C*\n" f"• `RAM Carga` Min {stats['ram_load'][0]:.1f}% | Avg {stats['ram_load'][2]:.1f}% | Max *{stats['ram_load'][1]:.1f}%*\n" f"• `GPU Temp` Min {stats['gpu_temp'][0]:.1f}°C | Avg {stats['gpu_temp'][2]:.1f}°C | Max *{stats['gpu_temp'][1]:.1f}°C*")
         docker_status = "\n".join(f"  {'🟢' if info.get('running') else '🔴'} `{name}`" for name, info in telemetry["containers"].items()) or "  ⚪ Sin contenedores"
-        return f"""📊 *REPORTE DIARIO DEL SERVIDOR*
+        return f"""📊 *REPORTE DIARIO DEL SERVIDOR: {hostname}*
 ━━━━━━━━━━━━━━━━━━━━
 
 🧠 *ESTADO ACTUAL*
@@ -153,3 +157,17 @@ class SREAgent:
 ━━━━━━━━━━━━━━━━━━━━
 💡 *Diagnóstico SRE:*
 _{verdict}_"""
+
+    @staticmethod
+    def _format_info(info: dict[str, Any], hostname: str) -> str:
+        system, cpu = info["system"], info["cpu"]
+        memory, gpu = info["memory"], info["gpu"]
+        gpu_text = f"{gpu.get('name')} ({gpu.get('memory_total_mb')} MB, driver {gpu.get('driver')})" if gpu.get("name") else "No disponible"
+        return (
+            f"🖥️ INFORMACIÓN DEL SISTEMA: {hostname}\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"SO: {system['os']}\nKernel: {system['kernel']}\nArquitectura: {system['architecture']}\n"
+            f"Procesador: {system['processor']}\nCPU: {cpu['physical_cores']} físicos / {cpu['logical_cores']} lógicos\n"
+            f"Frecuencia máxima: {cpu['frequency_mhz']} MHz\nRAM total: {memory['total_gb']} GB\nGPU: {gpu_text}\n"
+            f"Discos: {', '.join(f'{name} {value}%' for name, value in info['disks'].items())}\n"
+            f"Contenedores Docker: {info['docker_containers']}"
+        )

@@ -10,6 +10,7 @@ import requests
 from .agent import SREAgent
 from .config import Settings
 from .integrations import TelegramNotifier
+from .reporting import get_hostname
 
 
 COMMANDS = {
@@ -19,6 +20,7 @@ COMMANDS = {
     "/gpu": "Temperatura y uso de GPU",
     "/disks": "Uso de discos",
     "/docker": "Estado de contenedores",
+    "/info": "Características del sistema y hardware",
     "/help": "Lista de comandos",
 }
 
@@ -59,7 +61,7 @@ class TelegramBot:
         if not text:
             return
         if text == "/help":
-            response = "🤖 COMANDOS SRE\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(f"{command} - {description}" for command, description in COMMANDS.items())
+            response = f"🤖 COMANDOS SRE - {get_hostname()}\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(f"{command} - {description}" for command, description in COMMANDS.items())
         else:
             response = self.agent.command(text)
         self.notifier.send_to_chat(chat_id, response, parse_mode=None)

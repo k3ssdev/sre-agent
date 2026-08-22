@@ -94,6 +94,7 @@ El bot de Telegram permite consultar el servidor con estos comandos:
 /gpu           Temperatura y uso de GPU
 /disks         Uso de discos
 /docker        Estado de contenedores
+/info          Características del sistema y hardware
 /help          Lista de comandos
 ```
 

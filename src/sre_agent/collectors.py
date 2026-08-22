@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import subprocess
 from typing import Any
 
@@ -49,6 +50,40 @@ class InfrastructureCollector:
         except docker.errors.DockerException as error:
             print(f"Docker no disponible; se omite la comprobación de contenedores: {error}")
             return {}
+
+    def collect_system_info(self) -> dict[str, Any]:
+        memory = psutil.virtual_memory()
+        cpu_frequency = psutil.cpu_freq()
+        return {
+            "system": {
+                "os": platform.platform(),
+                "kernel": platform.release(),
+                "architecture": platform.machine(),
+                "processor": platform.processor() or "unknown",
+            },
+            "cpu": {
+                "physical_cores": psutil.cpu_count(logical=False) or 0,
+                "logical_cores": psutil.cpu_count(logical=True) or 0,
+                "frequency_mhz": round(cpu_frequency.max if cpu_frequency else 0),
+            },
+            "memory": {"total_gb": round(memory.total / 1024**3, 2)},
+            "gpu": self._gpu_hardware_info(),
+            "disks": self.collect_disks(),
+            "docker_containers": len(self.collect_containers()),
+        }
+
+    @staticmethod
+    def _gpu_hardware_info() -> dict[str, Any]:
+        try:
+            output = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+            name, driver, memory_total = (value.strip() for value in output.split(",", 2))
+            return {"name": name, "driver": driver, "memory_total_mb": float(memory_total)}
+        except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            return {"status": "unavailable", "error": str(error)}
 
     @staticmethod
     def collect_updates() -> dict[str, int]:

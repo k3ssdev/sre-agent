@@ -1,6 +1,7 @@
 """Pure formatting helpers for Telegram reports."""
 
 import re
+import platform
 from typing import Any
 
 
@@ -25,11 +26,15 @@ def get_status_icon(value: Any, warn: float = 75, crit: float = 90) -> str:
         return "⚪"
 
 
-def format_alert_report(alerts: list[str], diagnosis: str) -> str:
+def get_hostname() -> str:
+    return platform.node() or "hostname-desconocido"
+
+
+def format_alert_report(alerts: list[str], diagnosis: str, hostname: str | None = None) -> str:
     """Build an alert message without Markdown formatting."""
     alert_lines = "\n".join(f"🔴 {alert}" for alert in alerts)
     return (
-        "🚨 ALERTA SERVIDOR\n"
+        f"🚨 ALERTA SERVIDOR: {hostname or get_hostname()}\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         "ESTADO\n"
         f"{alert_lines}\n\n"
