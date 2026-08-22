@@ -46,6 +46,71 @@ class SREAgent:
         self.telegram.send(self._format_report(telemetry, verdict))
         print("Reporte diario visual enviado con éxito a Telegram.")
 
+    def command(self, command: str) -> str:
+        """Return a plain-text response for a Telegram command."""
+        if command == "/daily_report":
+            stats = self.history.get_last_24_hours()
+            telemetry = self.collector.collect_telemetry(stats)
+            verdict = self.ollama.ask(
+                "Resume esta telemetría SRE en una o dos líneas, sin Markdown:\n"
+                + json.dumps(telemetry, indent=2),
+                "Servicios operando dentro de los parámetros esperados.",
+            )
+            return self._format_plain_report(telemetry, verdict)
+
+        if command == "/status":
+            telemetry = self.collector.collect_telemetry()
+            return self._format_status(telemetry)
+
+        resources = self.collector.collect_resources()
+        if command == "/cpu":
+            return f"🧠 CPU\n━━━━━━━━━━━━━━━━━━━━\nCarga: {resources['cpu_load_percent']}%\nTemperatura: {resources['cpu_temp_c']}°C\nRAM: {resources['ram_used_percent']}%"
+        if command == "/gpu":
+            gpu = resources.get("gpu", {})
+            return f"🎮 GPU\n━━━━━━━━━━━━━━━━━━━━\nTemperatura: {gpu.get('temp_c', 'N/A')}°C\nVRAM: {gpu.get('vram_used_mb', 0)} / {gpu.get('vram_total_mb', 0)} MB\nUso: {gpu.get('util_percent', 'N/A')}%"
+        if command == "/disks":
+            disks = self.collector.collect_disks()
+            lines = [f"💾 {name}: {make_bar(value)} {value}% {get_status_icon(value)}" for name, value in disks.items()]
+            return "💾 DISCOS\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines)
+        if command == "/docker":
+            containers = self.collector.collect_containers()
+            lines = [f"{'🟢' if data['running'] else '🔴'} {name}: {data['status']}" for name, data in containers.items()]
+            return "🐳 DOCKER\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
+        return "Comando no reconocido. Usa /help para ver los comandos disponibles."
+
+    @staticmethod
+    def _format_status(telemetry: dict[str, Any]) -> str:
+        resources = telemetry["resources"]
+        alerts = AlertEvaluator({"cpu_temp": 80, "gpu_temp": 82, "disk_percent": 90}).evaluate(telemetry)
+        state = "🔴 CON ALERTAS" if alerts else "🟢 SISTEMA NOMINAL"
+        return (
+            f"📊 ESTADO DEL SERVIDOR\n━━━━━━━━━━━━━━━━━━━━\n{state}\n\n"
+            f"CPU: {resources['cpu_load_percent']}% | {resources['cpu_temp_c']}°C\n"
+            f"RAM: {resources['ram_used_percent']}%\n"
+            f"GPU: {resources.get('gpu', {}).get('temp_c', 'N/A')}°C\n"
+            f"Discos: {len(telemetry['disks'])} comprobados\n"
+            f"Docker: {len(telemetry['containers'])} contenedores\n"
+            f"Alertas: {len(alerts)}"
+        )
+
+    @staticmethod
+    def _format_plain_report(telemetry: dict[str, Any], verdict: str) -> str:
+        resources = telemetry["resources"]
+        disks = telemetry["disks"]
+        gpu = resources.get("gpu", {})
+        containers = telemetry["containers"]
+        docker_status = "\n".join(f"{'🟢' if data.get('running') else '🔴'} {name}" for name, data in containers.items()) or "Sin contenedores"
+        return (
+            "📊 REPORTE DIARIO DEL SERVIDOR\n━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🧠 ESTADO ACTUAL\nCPU {make_bar(resources.get('cpu_load_percent', 0))} {resources.get('cpu_load_percent', 0)}% ({resources.get('cpu_temp_c', 0)}°C)\n"
+            f"RAM {make_bar(resources.get('ram_used_percent', 0))} {resources.get('ram_used_percent', 0)}% ({resources.get('ram_used_gb', 0)} GB)\n\n"
+            f"🎮 GPU\nTemperatura: {gpu.get('temp_c', 'N/A')}°C | VRAM: {gpu.get('vram_used_mb', 0)} MB\n\n"
+            "💾 ALMACENAMIENTO\n"
+            + "\n".join(f"{name}: {make_bar(value)} {value}% {get_status_icon(value)}" for name, value in disks.items())
+            + f"\n\n🐳 DOCKER\n{docker_status}\n\n📦 ACTUALIZACIONES\n{telemetry['updates'].get('pending_updates', 0)} pendientes\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n💡 DIAGNÓSTICO SRE\n{verdict.strip()}"
+        )
+
     @staticmethod
     def _format_report(telemetry: dict[str, Any], verdict: str) -> str:
         resources, disks = telemetry["resources"], telemetry["disks"]

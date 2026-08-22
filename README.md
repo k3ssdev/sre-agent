@@ -75,6 +75,18 @@ El script está organizado por responsabilidades: `InfrastructureCollector` reco
 
 Las alertas se envían a Telegram como texto plano con formato visual y sin Markdown. El reporte diario conserva su formato Markdown.
 
+El bot de Telegram permite consultar el servidor con estos comandos:
+
+```text
+/status        Estado general
+/daily_report  Reporte diario
+/cpu           CPU, temperatura y RAM
+/gpu           Temperatura y uso de GPU
+/disks         Uso de discos
+/docker        Estado de contenedores
+/help          Lista de comandos
+```
+
 ### 3. Despliegue de Servicios y Timers (`systemd`)
 
 ```bash
@@ -92,6 +104,7 @@ printf 'SRE_AGENT_DIR=%s\n' "$PWD" > ~/.config/sre-agent/environment
 systemctl --user daemon-reload
 systemctl --user enable --now ollama-agent.timer
 systemctl --user enable --now ollama-daily-report.timer
+systemctl --user enable --now ollama-telegram-bot.service
 
 # Habilitar persistencia de procesos tras cerrar sesión
 loginctl enable-linger $USER
@@ -148,6 +161,7 @@ systemctl --user start ollama-daily-report.service
 ```bash
 journalctl --user -u ollama-agent.service -n 50 --no-pager
 journalctl --user -u ollama-daily-report.service -n 50 --no-pager
+journalctl --user -u ollama-telegram-bot.service -n 50 --no-pager
 
 ```
 
@@ -174,7 +188,8 @@ journalctl --user -u ollama-daily-report.service -n 50 --no-pager
 │   ├── ollama-agent.service     # Servicio de comprobación periódica
 │   ├── ollama-agent.timer       # Temporizador cada 10 minutos
 │   ├── ollama-daily-report.service # Servicio de reporte ejecutivo matutino
-│   └── ollama-daily-report.timer   # Temporizador de reporte diario (09:00)
+│   ├── ollama-daily-report.timer   # Temporizador de reporte diario (09:00)
+│   └── ollama-telegram-bot.service # Bot de comandos Telegram
 ├── .gitignore
 └── README.md
 

@@ -25,12 +25,15 @@ class TelegramNotifier:
         self.settings = settings
 
     def send(self, text: str, parse_mode: str | None = "Markdown") -> None:
+        self.send_to_chat(self.settings.telegram_chat_id, text, parse_mode)
+
+    def send_to_chat(self, chat_id: str, text: str, parse_mode: str | None = None) -> None:
         if not self.settings.telegram_token or not self.settings.telegram_chat_id:
             print("Telegram no configurado. Mensaje:\n", text)
             return
         url = f"https://api.telegram.org/bot{self.settings.telegram_token}/sendMessage"
         try:
-            payload = {"chat_id": self.settings.telegram_chat_id, "text": text}
+            payload = {"chat_id": chat_id, "text": text}
             if parse_mode:
                 payload["parse_mode"] = parse_mode
             requests.post(url, json=payload, timeout=30).raise_for_status()
