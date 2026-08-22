@@ -9,7 +9,7 @@ Agente autónomo de observabilidad y fiabilidad (SRE) para servidores Linux. Rec
 - **Monitorización continua (10 min):** Chequeo pasivo de CPU, RAM, GPU (NVIDIA), almacenamiento, Docker y alertas de hardware SMART sin falsos positivos.
 - **Diagnóstico Inteligente Local:** Disparo automático de inferencia con Ollama únicamente ante métricas fuera de umbral o incidentes de infraestructura.
 - **Reporte Matutino Visual:** Resumen diario con métricas 24h (mínimos, máximos y medias), barras de progreso monoespaciadas y diagnóstico SRE.
-- **Persistencia sin root:** Despliegue mediante `systemd user timers` con soporte para ejecuciones continuas en segundo plano (`loginctl enable-linger`).
+- **Persistencia local:** Historial CSV en el directorio del usuario y despliegue mediante `systemd user timers` con soporte para ejecuciones continuas en segundo plano (`loginctl enable-linger`).
 
 ---
 
@@ -29,7 +29,13 @@ sudo apt install -y python3 python3-docker python3-psutil python3-requests smart
 ### 2. Dependencias Python
 
 Las dependencias se instalan desde los paquetes del sistema para evitar modificar
-el entorno Python gestionado por Debian/Ubuntu.
+el entorno Python gestionado por Debian/Ubuntu. Los paquetes necesarios están
+incluidos en el comando de la sección anterior.
+
+Además, deben estar instalados y activos Docker y Ollama. `smartmontools` aporta
+`smartctl`; `lsblk` pertenece normalmente a `util-linux`, y `nvidia-smi` requiere
+los controladores NVIDIA correspondientes. El agente necesita acceso al socket
+de Docker y permisos `sudoers` para ejecutar `smartctl` sin contraseña.
 
 ---
 
@@ -67,6 +73,8 @@ El fichero `.env` contiene credenciales y no debe versionarse.
 
 El script está organizado por responsabilidades: `InfrastructureCollector` recopila telemetría, `HistoryRepository` persiste muestras, `AlertEvaluator` aplica umbrales, y `OllamaClient`/`TelegramNotifier` integran servicios externos. `SREAgent` coordina los casos de uso y `main()` solo procesa la CLI.
 
+Las alertas se envían a Telegram como texto plano con formato visual y sin Markdown. El reporte diario conserva su formato Markdown.
+
 ### 3. Despliegue de Servicios y Timers (`systemd`)
 
 ```bash
@@ -75,6 +83,10 @@ mkdir -p ~/.config/systemd/user
 
 # Copiar archivos systemd
 cp systemd/* ~/.config/systemd/user/
+
+# Indicar dónde está clonado el proyecto (puede ser cualquier ruta)
+mkdir -p ~/.config/sre-agent
+printf 'SRE_AGENT_DIR=%s\n' "$PWD" > ~/.config/sre-agent/environment
 
 # Recargar daemons y habilitar temporizadores
 systemctl --user daemon-reload
@@ -86,6 +98,17 @@ loginctl enable-linger $USER
 
 ```
 
+Los servicios leen la ruta del proyecto desde `~/.config/sre-agent/environment`,
+por lo que el repositorio puede clonarse en cualquier directorio. El fichero debe
+contener, por ejemplo:
+
+```dotenv
+SRE_AGENT_DIR=/ruta/donde/esta/clonado/sre-agent
+```
+
+Después ejecutan el paquete con `/usr/bin/python3` y `PYTHONPATH` apunta a
+`$SRE_AGENT_DIR/src`.
+
 ---
 
 ## 🔍 Comprobación y Operación
@@ -93,6 +116,7 @@ loginctl enable-linger $USER
 Para ejecutar el paquete localmente desde el layout `src`:
 
 ```bash
+cd /ruta/donde/esta/clonado/sre-agent
 PYTHONPATH=src python3 -m sre_agent
 ```
 
@@ -145,6 +169,7 @@ journalctl --user -u ollama-daily-report.service -n 50 --no-pager
 │       ├── integrations.py       # Clientes Ollama y Telegram
 │       └── reporting.py          # Formateo de reportes
 ├── pyproject.toml                # Metadatos y dependencias del paquete
+├── .env.example                  # Plantilla de configuración
 ├── systemd/
 │   ├── ollama-agent.service     # Servicio de comprobación periódica
 │   ├── ollama-agent.timer       # Temporizador cada 10 minutos

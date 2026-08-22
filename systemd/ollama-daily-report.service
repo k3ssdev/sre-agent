@@ -5,9 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/Proyectos/sre-agent
-Environment=PYTHONPATH=%h/Proyectos/sre-agent/src
-ExecStart=/usr/bin/python3 -m sre_agent --daily-report
+EnvironmentFile=%h/.config/sre-agent/environment
+ExecStart=/bin/sh -c 'cd "$SRE_AGENT_DIR" && PYTHONPATH="$SRE_AGENT_DIR/src" exec /usr/bin/python3 -m sre_agent --daily-report'
 StandardOutput=journal
 StandardError=journal
 
