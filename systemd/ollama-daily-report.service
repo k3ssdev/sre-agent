@@ -1,0 +1,15 @@
+[Unit]
+Description=Ollama SRE Daily Report
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Proyectos/sre-agent
+Environment=PYTHONPATH=%h/Proyectos/sre-agent/src
+ExecStart=/usr/bin/python3 -m sre_agent --daily-report
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

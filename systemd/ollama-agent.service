@@ -1,0 +1,15 @@
+[Unit]
+Description=Ollama SRE Telemetry & Alert Agent
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Proyectos/sre-agent
+Environment=PYTHONPATH=%h/Proyectos/sre-agent/src
+ExecStart=/usr/bin/python3 -m sre_agent
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
