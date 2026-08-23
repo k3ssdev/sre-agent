@@ -1,0 +1,6 @@
+docker
+psutil
+requests
+
+[dev]
+pytest>=8.0
