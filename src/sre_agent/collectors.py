@@ -16,8 +16,8 @@ import psutil
 
 class InfrastructureCollector:
     def collect_resources(self) -> dict[str, Any]:
-        ram = psutil.virtual_memory()
-        return {"cpu_load_percent": psutil.cpu_percent(interval=1), "cpu_temp_c": self._cpu_temperature(), "ram_used_percent": ram.percent, "ram_used_gb": round(ram.used / 1024**3, 2), "gpu": self._gpu_info()}
+        ram = self._memory_info()
+        return {"cpu_load_percent": psutil.cpu_percent(interval=1), "cpu_temp_c": self._cpu_temperature(), "ram_used_percent": ram["percent"], "ram_used_gb": round(ram["used"] / 1024**3, 2), "gpu": self._gpu_info()}
 
     @staticmethod
     def _cpu_temperature() -> float:
@@ -59,25 +59,55 @@ class InfrastructureCollector:
             return {}
 
     def collect_system_info(self) -> dict[str, Any]:
-        memory = psutil.virtual_memory()
+        memory = self._memory_info()
         cpu_frequency = psutil.cpu_freq()
         return {
             "system": {
                 "os": platform.platform(),
                 "kernel": platform.release(),
                 "architecture": platform.machine(),
-                "processor": platform.processor() or "unknown",
+                "processor": self._processor_model(),
             },
             "cpu": {
+                "model": self._processor_model(),
                 "physical_cores": psutil.cpu_count(logical=False) or 0,
                 "logical_cores": psutil.cpu_count(logical=True) or 0,
                 "frequency_mhz": round(cpu_frequency.max if cpu_frequency else 0),
             },
-            "memory": {"total_gb": round(memory.total / 1024**3, 2)},
+            "memory": {"total_gb": round(memory["total"] / 1024**3, 2), "used_gb": round(memory["used"] / 1024**3, 2), "used_percent": memory["percent"]},
             "gpu": self._gpu_hardware_info(),
             "disks": self.collect_disks(),
             "docker_containers": len(self.collect_containers()),
         }
+
+    @staticmethod
+    def _memory_info() -> dict[str, float]:
+        meminfo_path = Path("/host/proc/meminfo")
+        try:
+            values = {}
+            for line in meminfo_path.read_text(encoding="utf-8").splitlines():
+                key, separator, value = line.partition(":")
+                if separator and value.strip().endswith(" kB"):
+                    values[key] = float(value.strip()[:-3]) * 1024
+            total = values["MemTotal"]
+            available = values["MemAvailable"]
+            used = total - available
+            return {"total": total, "used": used, "percent": used / total * 100}
+        except (KeyError, OSError, ValueError):
+            memory = psutil.virtual_memory()
+            return {"total": float(memory.total), "used": float(memory.used), "percent": float(memory.percent)}
+
+    @staticmethod
+    def _processor_model() -> str:
+        for cpuinfo_path in ("/host/proc/cpuinfo", "/proc/cpuinfo"):
+            try:
+                for line in Path(cpuinfo_path).read_text(encoding="utf-8").splitlines():
+                    key, separator, value = line.partition(":")
+                    if separator and key.strip().lower() in {"model name", "hardware"} and value.strip():
+                        return value.strip()
+            except OSError:
+                continue
+        return platform.processor() or "unknown"
 
     @staticmethod
     def _gpu_hardware_info() -> dict[str, Any]:

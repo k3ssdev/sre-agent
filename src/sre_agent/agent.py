@@ -92,12 +92,13 @@ class SREAgent:
     @staticmethod
     def _format_status(telemetry: dict[str, Any], hostname: str) -> str:
         resources = telemetry["resources"]
+        ram_percent = float(resources.get("ram_used_percent", 0))
         alerts = AlertEvaluator({"cpu_temp": 80, "gpu_temp": 82, "disk_percent": 90}).evaluate(telemetry)
         state = "🔴 CON ALERTAS" if alerts else "🟢 SISTEMA NOMINAL"
         return (
             f"📊 *ESTADO DEL SERVIDOR: {hostname}*\n━━━━━━━━━━━━━━━━━━━━\n{state}\n\n"
             f"• *CPU:* `{resources['cpu_load_percent']}%` | `{resources['cpu_temp_c']}°C`\n"
-            f"• *RAM:* `{resources['ram_used_percent']}%`\n"
+            f"• *RAM:* `{ram_percent:.1f}%`\n"
             f"• *GPU:* `{resources.get('gpu', {}).get('temp_c', 'N/A')}°C`\n"
             f"• *Discos comprobados:* `{len(telemetry['disks'])}`\n"
             f"• *Contenedores Docker:* `{len(telemetry['containers'])}`\n"
@@ -107,6 +108,7 @@ class SREAgent:
     @staticmethod
     def _format_plain_report(telemetry: dict[str, Any], verdict: str, hostname: str) -> str:
         resources = telemetry["resources"]
+        ram_percent = float(resources.get("ram_used_percent", 0))
         disks = telemetry["disks"]
         gpu = resources.get("gpu", {})
         containers = telemetry["containers"]
@@ -114,7 +116,7 @@ class SREAgent:
         return (
             f"📊 *REPORTE DIARIO DEL SERVIDOR: {hostname}*\n━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🧠 *ESTADO ACTUAL*\n• *CPU:* `{make_bar(resources.get('cpu_load_percent', 0))} {resources.get('cpu_load_percent', 0)}% ({resources.get('cpu_temp_c', 0)}°C)`\n"
-            f"• *RAM:* `{make_bar(resources.get('ram_used_percent', 0))} {resources.get('ram_used_percent', 0)}% ({resources.get('ram_used_gb', 0)} GB)`\n\n"
+            f"• *RAM:* `{make_bar(ram_percent)} {ram_percent:.1f}% ({resources.get('ram_used_gb', 0)} GB)`\n\n"
             f"🎮 *GPU*\n• *Temperatura:* `{gpu.get('temp_c', 'N/A')}°C` | *VRAM:* `{gpu.get('vram_used_mb', 0)} MB`\n\n"
             "💾 *ALMACENAMIENTO*\n"
             + "\n".join(f"• *{name}:* `{make_bar(value)} {value}%` {get_status_icon(value)}" for name, value in disks.items())
@@ -125,6 +127,7 @@ class SREAgent:
     @staticmethod
     def _format_report(telemetry: dict[str, Any], verdict: str, hostname: str) -> str:
         resources, disks = telemetry["resources"], telemetry["disks"]
+        ram_percent = float(resources.get("ram_used_percent", 0))
         gpu, stats = resources.get("gpu", {}), telemetry.get("stats_24h")
         smart_failed = any(isinstance(info, dict) and not info.get("health_passed", True) for info in telemetry["smart_health"].values())
         history = "\n📈 *MÉTRICAS 24H*\n• Recopilando primeras muestras..."
@@ -136,7 +139,7 @@ class SREAgent:
 
 🧠 *ESTADO ACTUAL*
 • `CPU` `{make_bar(resources.get('cpu_load_percent', 0))}` {resources.get('cpu_load_percent', 0)}% ({resources.get('cpu_temp_c', 0)}°C)
-• `RAM` `{make_bar(resources.get('ram_used_percent', 0))}` {resources.get('ram_used_percent', 0)}% ({resources.get('ram_used_gb', 0)} GB)
+• `RAM` `{make_bar(ram_percent)}` {ram_percent:.1f}% ({resources.get('ram_used_gb', 0)} GB)
 
 🎮 *GPU*
 • `Núcleo` {gpu.get('temp_c', 'N/A')}°C | `VRAM` {int(gpu.get('vram_used_mb', 0))} MB
