@@ -21,6 +21,7 @@ COMMANDS = {
     "/disks": "Uso de discos",
     "/docker": "Estado de contenedores",
     "/info": "Características del sistema y hardware",
+    "/wake": "Despertar el servidor (Wake-on-LAN)",
     "/help": "Lista de comandos",
 }
 

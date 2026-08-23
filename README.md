@@ -35,6 +35,18 @@ Configura el agente en `.env` a partir de `.env.example`:
 cp .env.example .env
 ```
 
+El token de Telegram se gestiona como Docker Secret, no como variable de
+entorno. Crea el archivo local con el token nuevo generado por `@BotFather`:
+
+```bash
+mkdir -p secrets
+printf '%s' 'TOKEN_DE_TELEGRAM' > secrets/telegram_token
+chmod 600 secrets/telegram_token
+```
+
+El archivo `secrets/telegram_token` está excluido de Git. Si el token anterior
+quedó expuesto, revócalo primero desde `@BotFather`.
+
 Edita `.env` con tus valores:
 
 ```dotenv
@@ -43,12 +55,12 @@ OLLAMA_URL=http://localhost:11434/api/generate
 OLLAMA_MODEL=qwen2.5-coder:7b
 OPENSRE_COMMAND=~/.local/bin/opensre
 OPENSRE_TIMEOUT=120
-TELEGRAM_TOKEN=TU_BOT_TOKEN
 TELEGRAM_CHAT_ID=TU_CHAT_ID
 SRE_HISTORY_FILE=~/.config/server_metrics_history.csv
 ```
 
-El fichero `.env` contiene credenciales y no debe versionarse.
+El fichero `.env` contiene configuración local y no debe versionarse. El token
+se lee dentro del contenedor desde `/run/secrets/telegram_token`.
 
 `SRE_PROVIDER` controla el análisis de alertas y acepta `ollama` u `opensre`. Con
 `opensre`, el agente crea un JSON temporal con la alerta y ejecuta

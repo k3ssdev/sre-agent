@@ -87,6 +87,9 @@ class SREAgent:
             containers = self.collector.collect_containers()
             lines = [f"{'🟢' if data['running'] else '🔴'} *{name}:* `{data['status']}`" for name, data in containers.items()]
             return f"🐳 *DOCKER - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
+        if command == "/wake":
+            return f"Equipo `{self.hostname}` esta despierto."
+             
         return f"*{self.hostname}:* comando no reconocido. Usa /help para ver los comandos disponibles."
 
     @staticmethod

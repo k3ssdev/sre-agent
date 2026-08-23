@@ -1,4 +1,5 @@
 .env
+secrets/telegram_token
 .venv/
 __pycache__/
 *.py[cod]
