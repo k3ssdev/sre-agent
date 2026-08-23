@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import platform
+import shlex
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import docker
@@ -28,7 +30,8 @@ class InfrastructureCollector:
     @staticmethod
     def _gpu_info() -> dict[str, Any]:
         try:
-            result = subprocess.check_output(["nvidia-smi", "--query-gpu=temperature.gpu,memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"], text=True)
+            command = InfrastructureCollector._nvidia_smi_command()
+            result = subprocess.check_output(command + ["--query-gpu=temperature.gpu,memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"], text=True)
             temp, memory_used, memory_total, utilization = (float(value.strip()) for value in result.strip().split(","))
             return {"temp_c": temp, "vram_used_mb": memory_used, "vram_total_mb": memory_total, "util_percent": utilization}
         except (OSError, subprocess.CalledProcessError, ValueError) as error:
@@ -36,10 +39,14 @@ class InfrastructureCollector:
 
     @staticmethod
     def collect_disks() -> dict[str, float]:
-        disks = {"root": psutil.disk_usage("/").percent}
+        host_root = Path(os.getenv("SRE_HOST_ROOT", "/host/root"))
+        if not host_root.is_dir():
+            host_root = Path("/")
+        disks = {"root": psutil.disk_usage(host_root).percent}
         for name, path in (("hdd8tb", "/mnt/hdd8tb"), ("hdd1tb", "/mnt/hdd1tb")):
-            if os.path.exists(path):
-                disks[name] = psutil.disk_usage(path).percent
+            disk_path = host_root / path.lstrip("/")
+            if disk_path.exists():
+                disks[name] = psutil.disk_usage(disk_path).percent
         return disks
 
     @staticmethod
@@ -75,8 +82,9 @@ class InfrastructureCollector:
     @staticmethod
     def _gpu_hardware_info() -> dict[str, Any]:
         try:
+            command = InfrastructureCollector._nvidia_smi_command()
             output = subprocess.check_output(
-                ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"],
+                command + ["--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"],
                 stderr=subprocess.DEVNULL,
                 text=True,
             ).strip()
@@ -84,6 +92,10 @@ class InfrastructureCollector:
             return {"name": name, "driver": driver, "memory_total_mb": float(memory_total)}
         except (OSError, subprocess.CalledProcessError, ValueError) as error:
             return {"status": "unavailable", "error": str(error)}
+
+    @staticmethod
+    def _nvidia_smi_command() -> list[str]:
+        return shlex.split(os.getenv("NVIDIA_SMI_COMMAND", "nvidia-smi"))
 
     @staticmethod
     def collect_updates() -> dict[str, int]:
@@ -104,7 +116,10 @@ class InfrastructureCollector:
         for disk in disks:
             device = f"/dev/{disk}"
             try:
-                smart_output = subprocess.check_output(["sudo", "smartctl", "-H", "-A", "-j", device], stderr=subprocess.DEVNULL, text=True)
+                smartctl_command = ["smartctl", "-H", "-A", "-j", device]
+                if os.geteuid() != 0:
+                    smartctl_command.insert(0, "sudo")
+                smart_output = subprocess.check_output(smartctl_command, stderr=subprocess.DEVNULL, text=True)
                 data = json.loads(smart_output)
                 reallocated = next((attribute.get("raw", {}).get("value", 0) for attribute in data.get("ata_smart_attributes", {}).get("table", []) if attribute.get("name") == "Reallocated_Sector_Ct"), 0)
                 report[disk] = {"device": device, "health_passed": data.get("smart_status", {}).get("passed", True), "temperature_c": data.get("temperature", {}).get("current"), "reallocated_sectors": reallocated}

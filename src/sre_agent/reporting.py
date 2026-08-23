@@ -1,7 +1,9 @@
 """Pure formatting helpers for Telegram reports."""
 
-import re
+import os
 import platform
+import re
+from pathlib import Path
 from typing import Any
 
 
@@ -27,6 +29,13 @@ def get_status_icon(value: Any, warn: float = 75, crit: float = 90) -> str:
 
 
 def get_hostname() -> str:
+    hostname_file = Path(os.getenv("SRE_HOSTNAME_FILE", "/host/etc/hostname"))
+    try:
+        hostname = hostname_file.read_text(encoding="utf-8").strip()
+        if hostname:
+            return hostname
+    except OSError:
+        pass
     return platform.node() or "hostname-desconocido"
 
 

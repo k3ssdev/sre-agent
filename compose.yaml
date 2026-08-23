@@ -1,0 +1,27 @@
+services:
+  sre-agent:
+    build: .
+    command: all
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
+      NVIDIA_SMI_COMMAND: nsenter -t 1 -m /usr/bin/nvidia-smi
+      SRE_HISTORY_FILE: /var/lib/sre-agent/server_metrics_history.csv
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    pid: host
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /dev:/dev
+      - /:/host/root:ro
+      - /etc/hostname:/host/etc/hostname:ro
+      - sre-history:/var/lib/sre-agent
+
+volumes:
+  sre-history:

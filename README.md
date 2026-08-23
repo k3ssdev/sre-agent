@@ -9,51 +9,25 @@ Agente autónomo de observabilidad y fiabilidad (SRE) para servidores Linux. Rec
 - **Monitorización continua (10 min):** Chequeo pasivo de CPU, RAM, GPU (NVIDIA), almacenamiento, Docker y alertas de hardware SMART sin falsos positivos.
 - **Diagnóstico Inteligente Local:** Disparo automático de inferencia con Ollama únicamente ante métricas fuera de umbral o incidentes de infraestructura.
 - **Reporte Matutino Visual:** Resumen diario con métricas 24h (mínimos, máximos y medias), barras de progreso monoespaciadas y diagnóstico SRE.
-- **Persistencia local:** Historial CSV en el directorio del usuario y despliegue mediante `systemd user timers` con soporte para ejecuciones continuas en segundo plano (`loginctl enable-linger`).
+- **Persistencia local:** Historial CSV en un volumen Docker y ejecución continua mediante Docker Compose.
 
 ---
 
-## 📦 Requisitos y Dependencias
+## Requisitos
 
-- **OS:** Pop!\_OS / Ubuntu / Debian-based
-- **Hardware:** GPU NVIDIA con drivers operativos (`nvidia-smi`)
-- **Servicios:** Ollama en ejecución; Docker es necesario para consultar contenedores
+- Docker Compose
+- Ollama ejecutándose en el host
+- Token y chat ID de Telegram
+- Drivers NVIDIA instalados en el host para obtener datos de GPU
 
-### 1. Paquetes del Sistema
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-docker python3-psutil python3-requests smartmontools
-```
-
-### 2. Dependencias Python
-
-Las dependencias se instalan desde los paquetes del sistema para evitar modificar
-el entorno Python gestionado por Debian/Ubuntu. Los paquetes necesarios están
-incluidos en el comando de la sección anterior.
-
-Además, Ollama debe estar instalado y activo. Docker aporta la consulta de
-contenedores, pero el agente continúa funcionando si el daemon no está activo.
-`smartmontools` aporta
-`smartctl`; `lsblk` pertenece normalmente a `util-linux`, y `nvidia-smi` requiere
-los controladores NVIDIA correspondientes. El agente necesita acceso al socket
-de Docker y permisos `sudoers` para ejecutar `smartctl` sin contraseña.
+El contenedor accede al socket Docker y a los dispositivos del host para
+recopilar métricas, SMART, discos y GPU.
 
 ---
 
 ## 🛠️ Instalación y Configuración
 
-### 1. Configuración de permisos SMART
-
-Para permitir que el script lea el estado de salud físico de los discos NVMe/SATA sin interactividad de contraseña:
-
-```bash
-echo "$USER ALL=(ALL) NOPASSWD: /usr/sbin/smartctl" | sudo tee /etc/sudoers.d/smartctl
-sudo chmod 0440 /etc/sudoers.d/smartctl
-
-```
-
-### 2. Variables de Configuración
+## Configuración
 
 Configura el agente en `.env` a partir de `.env.example`:
 
@@ -98,37 +72,28 @@ El bot de Telegram permite consultar el servidor con estos comandos:
 /help          Lista de comandos
 ```
 
-### 3. Despliegue de Servicios y Timers (`systemd`)
+## Ejecución
 
-El script instala los servicios, crea el fichero de entorno con la ruta del
-proyecto, recarga `systemd` y activa los timers y el bot:
-
-```bash
-./scripts/setup-systemd.sh
-```
-
-Para comprobar el token de Telegram y que el servicio esté activo:
+Un único contenedor mantiene el bot activo, ejecuta las alertas cada 10 minutos
+y genera el reporte diario a las 09:00.
 
 ```bash
-./scripts/setup-systemd.sh --test-bot
+cp .env.example .env
+docker compose up -d --build
+docker compose logs -f sre-agent
 ```
 
-Para mantener los servicios activos aunque cierres la sesión:
+El historial se guarda en el volumen `sre-history`. El contenedor usa acceso
+privilegiado y monta `/proc`, `/sys` y `/dev` porque recopila telemetría del
+host y consulta SMART. Si Ollama escucha en otra dirección, define
+`OLLAMA_URL` en `.env`; en Linux, el valor predeterminado apunta al host con
+`host.docker.internal`.
+
+Para detener los servicios:
 
 ```bash
-loginctl enable-linger "$USER"
+docker compose down
 ```
-
-Los servicios leen la ruta del proyecto desde `~/.config/sre-agent/environment`,
-por lo que el repositorio puede clonarse en cualquier directorio. El fichero debe
-contener, por ejemplo:
-
-```dotenv
-SRE_AGENT_DIR=/ruta/donde/esta/clonado/sre-agent
-```
-
-Después ejecutan el paquete con `/usr/bin/python3` y `PYTHONPATH` apunta a
-`$SRE_AGENT_DIR/src`.
 
 ---
 
@@ -143,34 +108,10 @@ PYTHONPATH=src python3 -m sre_agent
 
 Con `python3 -m` se usa el nombre del módulo `sre_agent` (con guion bajo), no `sre-agent`.
 
-- **Verificar próximos disparos programados:**
+- **Inspeccionar logs de los contenedores:**
 
 ```bash
-systemctl --user list-timers --all | grep ollama
-
-```
-
-- **Forzar ejecución manual del agente de alerta:**
-
-```bash
-systemctl --user start ollama-agent.service
-
-```
-
-- **Forzar envío del reporte diario visual:**
-
-```bash
-systemctl --user start ollama-daily-report.service
-
-```
-
-- **Inspeccionar logs del sistema:**
-
-```bash
-journalctl --user -u ollama-agent.service -n 50 --no-pager
-journalctl --user -u ollama-daily-report.service -n 50 --no-pager
-journalctl --user -u ollama-telegram-bot.service -n 50 --no-pager
-
+docker compose logs -f sre-agent
 ```
 
 ### Pruebas manuales
@@ -211,14 +152,10 @@ contenedores, un daemon Docker accesible.
 ├── pyproject.toml                # Metadatos y dependencias del paquete
 ├── .env.example                  # Plantilla de configuración
 ├── scripts/
-│   ├── setup-systemd.sh          # Instala y prueba los servicios de usuario
-│   └── manual-test.py             # Ejecuta funciones manualmente
-├── systemd/
-│   ├── ollama-agent.service     # Servicio de comprobación periódica
-│   ├── ollama-agent.timer       # Temporizador cada 10 minutos
-│   ├── ollama-daily-report.service # Servicio de reporte ejecutivo matutino
-│   ├── ollama-daily-report.timer   # Temporizador de reporte diario (09:00)
-│   └── ollama-telegram-bot.service # Bot de comandos Telegram
+│   ├── docker-entrypoint.sh       # Ciclos del agente y reporte diario
+│   └── manual-test.py              # Ejecuta funciones manualmente
+├── Dockerfile
+├── compose.yaml                   # Servicios y scheduling de Docker
 ├── .gitignore
 └── README.md
 
