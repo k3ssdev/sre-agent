@@ -75,7 +75,7 @@ class SREAgent:
 
         resources = self.collector.collect_resources()
         if command == "/cpu":
-            return f"🧠 *CPU - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n• *Carga:* `{resources['cpu_load_percent']}%`\n• *Temperatura:* `{resources['cpu_temp_c']}°C`\n• *RAM:* `{resources['ram_used_percent']}%`"
+            return f"🧠 *CPU - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n• *Carga:* `{resources['cpu_load_percent']}%`\n• *Temperatura:* `{resources['cpu_temp_c']}°C`\n• *RAM:* `{float(resources['ram_used_percent']):.1f]}%`"
         if command == "/gpu":
             gpu = resources.get("gpu", {})
             return f"🎮 *GPU - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n• *Temperatura:* `{gpu.get('temp_c', 'N/A')}°C`\n• *VRAM:* `{gpu.get('vram_used_mb', 0)} / {gpu.get('vram_total_mb', 0)} MB`\n• *Uso:* `{gpu.get('util_percent', 'N/A')}%`"
@@ -88,7 +88,7 @@ class SREAgent:
             lines = [f"{'🟢' if data['running'] else '🔴'} *{name}:* `{data['status']}`" for name, data in containers.items()]
             return f"🐳 *DOCKER - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
         if command == "/wake":
-            return f"Equipo `{self.hostname}` esta despierto."
+            return f"🟢 Equipo `{self.hostname}` esta despierto."
              
         return f"*{self.hostname}:* comando no reconocido. Usa /help para ver los comandos disponibles."
 
