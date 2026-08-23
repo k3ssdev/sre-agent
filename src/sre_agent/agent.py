@@ -112,12 +112,12 @@ class SREAgent:
         disks = telemetry["disks"]
         gpu = resources.get("gpu", {})
         containers = telemetry["containers"]
-        docker_status = "\n".join(f"{'🟢' if data.get('running') else '🔴'} `{name}`" for name, data in containers.items()) or "Sin contenedores"
+        docker_status = "\n".join(f"`{name}` {'🟢' if data.get('running') else '🔴'}" for name, data in containers.items()) or "Sin contenedores"
         return (
             f"📊 *REPORTE DIARIO DEL SERVIDOR: {hostname}*\n━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🧠 *ESTADO ACTUAL*\n• *CPU:* `{make_bar(resources.get('cpu_load_percent', 0))} {resources.get('cpu_load_percent', 0)}% ({resources.get('cpu_temp_c', 0)}°C)`\n"
             f"• *RAM:* `{make_bar(ram_percent)} {ram_percent:.1f}% ({resources.get('ram_used_gb', 0)} GB)`\n\n"
-            f"🎮 *GPU*\n• *Temperatura:* `{gpu.get('temp_c', 'N/A')}°C` | *VRAM:* `{gpu.get('vram_used_mb', 0)} MB`\n\n"
+            f"🎮 *GPU*\n• *Temperatura:* `{gpu.get('temp_c', 'N/A')}°C` \n• *VRAM:* `{gpu.get('vram_used_mb', 0)} MB`\n\n"
             "💾 *ALMACENAMIENTO*\n"
             + "\n".join(f"• *{name}:* `{make_bar(value)} {value}%` {get_status_icon(value)}" for name, value in disks.items())
             + f"\n\n🐳 *DOCKER*\n{docker_status}\n\n📦 *ACTUALIZACIONES*\n• *Pendientes:* `{telemetry['updates'].get('pending_updates', 0)}`\n\n"
