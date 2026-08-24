@@ -17,4 +17,5 @@ src/sre_agent/config.py
 src/sre_agent/history.py
 src/sre_agent/integrations.py
 src/sre_agent/reporting.py
+src/sre_agent/tools.py
 tests/test_agent_commands.py
