@@ -53,8 +53,6 @@ Edita `.env` con tus valores:
 SRE_PROVIDER=ollama
 OLLAMA_URL=http://localhost:11434/api/generate
 OLLAMA_MODEL=qwen2.5-coder:7b
-OPENSRE_COMMAND=~/.local/bin/opensre
-OPENSRE_TIMEOUT=120
 TELEGRAM_CHAT_ID=TU_CHAT_ID
 SRE_HISTORY_FILE=~/.config/server_metrics_history.csv
 REPORT_TIME=08:00
@@ -63,10 +61,9 @@ REPORT_TIME=08:00
 El fichero `.env` contiene configuración local y no debe versionarse. El token
 se lee dentro del contenedor desde `/run/secrets/telegram_token`.
 
-`SRE_PROVIDER` controla el análisis de alertas y acepta `ollama` u `opensre`. Con
-`opensre`, el agente crea un JSON temporal con la alerta y ejecuta
-`OPENSRE_COMMAND investigate -i <archivo>`. Los reportes diarios y los comandos
-de Telegram siguen usando Ollama. `OPENSRE_TIMEOUT` está expresado en segundos.
+`SRE_PROVIDER` identifica el proveedor de análisis configurado. El agente usa
+Ollama directamente y los análisis `/sre` enriquecen la consulta con
+telemetría, sockets de red y búsquedas de archivos de solo lectura.
 
 El script está organizado por responsabilidades: `InfrastructureCollector` recopila telemetría, `HistoryRepository` persiste muestras, `AlertEvaluator` aplica umbrales, y `OllamaClient`/`TelegramNotifier` integran servicios externos. `SREAgent` coordina los casos de uso y `main()` solo procesa la CLI.
 
@@ -160,12 +157,10 @@ python3 scripts/manual-test.py alerts
 python3 scripts/manual-test.py ollama
 # Desde el host, si .env usa host.docker.internal para el contenedor:
 python3 scripts/manual-test.py ollama --ollama-url http://localhost:11434/api/generate
-python3 scripts/manual-test.py opensre
 python3 scripts/manual-test.py command --command /status
 ```
 
-La prueba `opensre` fuerza ese proveedor aunque `SRE_PROVIDER=ollama`. Las
-pruebas de recolección necesitan las dependencias Python y, para consultar
+Las pruebas de recolección necesitan las dependencias Python y, para consultar
 contenedores, un daemon Docker accesible.
 
 ---

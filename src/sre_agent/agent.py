@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import requests
 from typing import Any
 
 from .alerts import AlertEvaluator
@@ -12,6 +11,7 @@ from .config import Settings
 from .history import HistoryRepository
 from .integrations import InvestigationClient, TelegramNotifier
 from .reporting import format_alert_report, get_hostname, get_status_icon, make_bar, strip_markdown
+from .tools import auditar_red_sockets, buscar_archivo, obtener_telemetria_sistema
 
 
 class SREAgent:
@@ -102,53 +102,30 @@ class SREAgent:
         if cmd == "/wake":
             return f"🟢 Equipo `{self.hostname}` esta despierto."
 
-        # NUEVO BLOQUE OPENSRE
         if cmd == "/sre":
             if not args:
                 return "⚠️ Necesito contexto para investigar. Ejemplo: `/sre Revisa por qué el disco root está al 90%`"
-            return self._call_opensre_service(args)
+            return self._investigate_command(args)
              
         return f"*{self.hostname}:* comando no reconocido. Usa /help para ver los comandos disponibles."
 
-    def _call_opensre_service(self, query: str) -> str:
-        url = getattr(self.settings, "opensre_url", "http://opensre-api:8000/investigar")
-        
-        resources = self.collector.collect_resources()
-        disks = self.collector.collect_disks()
-        containers = self.collector.collect_containers()
-        
-        telemetry = {
-            "resources": resources,
-            "disks": disks,
-            "containers": containers
-        }
-        
-        prompt_enriquecido = (
-            f"Actúa como un Ingeniero SRE Senior. El usuario solicita la siguiente auditoría:\n"
-            f"'{query}'\n\n"
-            f"=== DATOS DE TELEMETRÍA ===\n"
-            f"{json.dumps(telemetry, indent=2)}\n"
-            f"==============================\n"
-            f"Instrucciones: Analiza los datos, estructura el informe paso a paso y "
-            f"responde COMPLETAMENTE EN ESPAÑOL. No utilices caracteres especiales raros ni formato Markdown complejo."
+    def _investigate_command(self, query: str) -> str:
+        query_lower = query.lower()
+        tools: dict[str, Any] = {"system": obtener_telemetria_sistema}
+        if "socket" in query_lower or "red" in query_lower:
+            tools["network_sockets"] = auditar_red_sockets
+        if any(word in query_lower for word in ("archivo", "flag", "busca")):
+            tools["file_search"] = lambda: buscar_archivo("flag.txt")
+        tool_results = {name: tool() for name, tool in tools.items()}
+        prompt = (
+            "Actúa como un Ingeniero SRE Senior. Responde completamente en español y "
+            "analiza únicamente los datos reales disponibles. Explica hallazgos, severidad "
+            "y acciones recomendadas sin inventar resultados.\n\n"
+            f"Consulta del usuario:\n{query}\n\n"
+            f"Resultados de herramientas de solo lectura:\n{json.dumps(tool_results, ensure_ascii=False, indent=2)}"
         )
-        
-        try:
-            response = requests.post(url, json={"mensaje": prompt_enriquecido}, timeout=120)
-            
-            if response.status_code == 200:
-                data = response.json()
-                respuesta = data.get('respuesta', 'Sin respuesta clara.')
-                
-                # ENVIAMOS TEXTO PLANO PURO (sin parse_mode Markdown para evitar errores 400)
-                # Devolvemos la cadena limpia
-                return f"Analisis SRE Profundo:\n----------------------------------------\n{respuesta}"
-            else:
-                return f"Error del motor SRE: Codigo {response.status_code}\nDetalle: {response.text}"
-        except requests.exceptions.Timeout:
-            return "OpenSRE ha excedido el tiempo de espera (Timeout de 120s)."
-        except Exception as e:
-            return f"Fallo de conexión con el contenedor OpenSRE:\n{e}"
+        response = self.investigator.ask(prompt, "No se pudo consultar Ollama.")
+        return f"Análisis SRE:\n----------------------------------------\n{response}"
             
     @staticmethod
     def _format_status(telemetry: dict[str, Any], hostname: str) -> str:

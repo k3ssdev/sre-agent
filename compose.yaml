@@ -9,7 +9,7 @@ services:
         required: false
     environment:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
-      OPENSRE_URL: http://opensre-api:8000/investigar  # Enlace directo al microservicio OpenSRE
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:latest}
       NVIDIA_SMI_COMMAND: nsenter -t 1 -m /usr/bin/nvidia-smi
       REPORT_TIME: ${REPORT_TIME:-08:00}
       SRE_HISTORY_FILE: /var/lib/sre-agent/server_metrics_history.csv
@@ -30,24 +30,6 @@ services:
       - sre-history:/var/lib/sre-agent
     secrets:
       - telegram_token
-    depends_on:
-      - opensre-api
-
-  opensre-api:
-    container_name: opensre-api
-    build: ./opensre-api
-    restart: unless-stopped
-    environment:
-      - LLM_PROVIDER=ollama
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:latest}
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    ports:
-      - "8000:8000"
-
 volumes:
   sre-history:
 

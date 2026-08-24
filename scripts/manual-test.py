@@ -20,7 +20,6 @@ def test_config() -> None:
     print(f"SRE_PROVIDER: {settings.sre_provider}")
     print(f"OLLAMA_MODEL: {settings.model_name}")
     print(f"OLLAMA_URL: {settings.ollama_url}")
-    print(f"OPENSRE_COMMAND: {settings.opensre_command}")
     print(f"Telegram configurado: {'sí' if settings.telegram_token and settings.telegram_chat_id else 'no'}")
 
 
@@ -62,21 +61,6 @@ def test_ollama(ollama_url: str | None = None) -> None:
     print(response)
 
 
-def test_opensre() -> None:
-    from sre_agent.config import Settings
-    from sre_agent.integrations import InvestigationClient
-
-    settings = replace(Settings(), sre_provider="opensre")
-    telemetry = {"manual_test": True}
-    response = InvestigationClient(settings).investigate(
-        ["Prueba manual de OpenSRE"],
-        telemetry,
-        "",
-        "OpenSRE no respondió",
-    )
-    print(response)
-
-
 def test_command(command: str) -> None:
     from sre_agent.agent import SREAgent
     from sre_agent.config import Settings
@@ -88,7 +72,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Pruebas manuales del agente SRE")
     parser.add_argument(
         "function",
-        choices=("config", "collect", "alerts", "ollama", "opensre", "command"),
+        choices=("config", "collect", "alerts", "ollama", "command"),
         help="Función que se quiere ejecutar",
     )
     parser.add_argument("--command", default="/status", help="Comando para la prueba command")
@@ -100,7 +84,6 @@ def main() -> None:
         "collect": collect_telemetry,
         "alerts": test_alerts,
         "ollama": test_ollama,
-        "opensre": test_opensre,
     }
     if args.function == "command":
         test_command(args.command)

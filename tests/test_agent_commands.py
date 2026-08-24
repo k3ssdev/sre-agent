@@ -75,6 +75,20 @@ def test_docker_command_reports_empty_host(agent: SREAgent) -> None:
     assert "Sin contenedores" in response
 
 
+def test_sre_command_uses_local_tools_and_ollama(agent: SREAgent, monkeypatch) -> None:
+    agent.investigator = Mock()
+    agent.investigator.ask.return_value = "Diagnóstico generado"
+    monkeypatch.setattr("sre_agent.agent.obtener_telemetria_sistema", lambda: {"cpu_percent": 10})
+    monkeypatch.setattr("sre_agent.agent.auditar_red_sockets", lambda: [{"local_address": "127.0.0.1:80"}])
+
+    response = agent.command("/sre Revisa la red y sus sockets")
+
+    assert "Diagnóstico generado" in response
+    prompt = agent.investigator.ask.call_args.args[0]
+    assert "127.0.0.1:80" in prompt
+    assert '"cpu_percent": 10' in prompt
+
+
 def test_history_returns_only_samples_from_last_24_hours(tmp_path, monkeypatch) -> None:
     now = 1_000_000
     history_file = tmp_path / "history.csv"

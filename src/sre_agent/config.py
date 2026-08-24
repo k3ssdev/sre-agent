@@ -36,8 +36,6 @@ class Settings:
     sre_provider: str = field(default_factory=lambda: os.getenv("SRE_PROVIDER", "ollama").strip().lower())
     ollama_url: str = field(default_factory=lambda: os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate"))
     model_name: str = field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b"))
-    opensre_command: str = field(default_factory=lambda: os.path.expanduser(os.path.expandvars(os.getenv("OPENSRE_COMMAND", "$HOME/.local/bin/opensre"))))
-    opensre_timeout: int = field(default_factory=lambda: int(os.getenv("OPENSRE_TIMEOUT", "120")))
     telegram_token: str = field(default_factory=lambda: read_secret("TELEGRAM_TOKEN_FILE", "TELEGRAM_TOKEN"))
     telegram_chat_id: str = field(default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", ""))
     history_file: Path = field(default_factory=lambda: Path(os.path.expanduser(os.path.expandvars(os.getenv("SRE_HISTORY_FILE", "$HOME/.config/server_metrics_history.csv")))))
