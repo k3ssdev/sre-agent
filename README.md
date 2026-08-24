@@ -158,6 +158,8 @@ python3 scripts/manual-test.py config
 python3 scripts/manual-test.py collect
 python3 scripts/manual-test.py alerts
 python3 scripts/manual-test.py ollama
+# Desde el host, si .env usa host.docker.internal para el contenedor:
+python3 scripts/manual-test.py ollama --ollama-url http://localhost:11434/api/generate
 python3 scripts/manual-test.py opensre
 python3 scripts/manual-test.py command --command /status
 ```

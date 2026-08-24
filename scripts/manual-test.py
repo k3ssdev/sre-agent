@@ -48,11 +48,14 @@ def test_alerts() -> None:
     print("\n".join(f"- {alert}" for alert in alerts) or "Sin alertas")
 
 
-def test_ollama() -> None:
+def test_ollama(ollama_url: str | None = None) -> None:
     from sre_agent.config import Settings
     from sre_agent.integrations import OllamaClient
 
-    response = OllamaClient(Settings()).ask(
+    settings = Settings()
+    if ollama_url:
+        settings = replace(settings, ollama_url=ollama_url)
+    response = OllamaClient(settings).ask(
         "Responde exactamente: Ollama operativo",
         "Ollama no respondió",
     )
@@ -89,6 +92,7 @@ def main() -> None:
         help="Función que se quiere ejecutar",
     )
     parser.add_argument("--command", default="/status", help="Comando para la prueba command")
+    parser.add_argument("--ollama-url", help="URL de Ollama para la prueba local")
     args = parser.parse_args()
 
     tests = {
@@ -100,6 +104,8 @@ def main() -> None:
     }
     if args.function == "command":
         test_command(args.command)
+    elif args.function == "ollama":
+        test_ollama(args.ollama_url)
     else:
         tests[args.function]()
 

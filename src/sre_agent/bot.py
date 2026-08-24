@@ -22,6 +22,7 @@ COMMANDS = {
     "/docker": "Estado de contenedores",
     "/info": "Características del sistema y hardware",
     "/wake": "Despertar el servidor (Wake-on-LAN)",
+    "/sre": "Investigar incidente profundo con IA",
     "/help": "Lista de comandos",
 }
 
@@ -58,11 +59,22 @@ class TelegramBot:
         chat_id = str(message.get("chat", {}).get("id", ""))
         if chat_id != self.settings.telegram_chat_id:
             return
-        text = message.get("text", "").split()[0].lower() if message.get("text") else ""
-        if not text:
+        
+        # text = message.get("text", "").split()[0].lower() if message.get("text") else ""
+        # if not text:
+        #     return
+        
+        full_text = message.get("text", "").strip() # Guardamos todo el texto
+        if not full_text:
             return
-        if text == "/help":
+        
+        command_word = full_text.split()[0].lower()
+        
+        # if text == "/help":
+        if command_word == "/help":
             response = f"🤖 *COMANDOS SRE - {get_hostname()}*\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(f"`{command}` - {description}" for command, description in COMMANDS.items())
         else:
-            response = self.agent.command(text)
-        self.notifier.send_to_chat(chat_id, response, parse_mode="Markdown")
+            # response = self.agent.command(text)
+            response = self.agent.command(full_text)  # Pasamos todo el texto al comando, no solo la primera palabra
+        parse_mode = None if command_word == "/sre" else "Markdown"
+        self.notifier.send_to_chat(chat_id, response, parse_mode=parse_mode)

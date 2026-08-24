@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import requests
 from typing import Any
 
 from .alerts import AlertEvaluator
@@ -53,9 +54,16 @@ class SREAgent:
         self.telegram.send(self._format_report(telemetry, verdict, self.hostname))
         print("Reporte diario visual enviado con éxito a Telegram.")
 
-    def command(self, command: str) -> str:
+    def command(self, full_command: str) -> str:
         """Return a plain-text response for a Telegram command."""
-        if command == "/report":
+        
+        # Separamos el comando principal de sus argumentos
+        parts = full_command.split(maxsplit=1)
+        cmd = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+
+        # Usamos 'cmd' en lugar del 'command' entero para las validaciones
+        if cmd == "/report":
             stats = self.history.get_last_24_hours()
             telemetry = self.collector.collect_telemetry(stats)
             verdict = self.investigator.ask(
@@ -66,32 +74,79 @@ class SREAgent:
             )
             return self._format_plain_report(telemetry, strip_markdown(verdict), self.hostname)
 
-        if command == "/status":
+        if cmd == "/status":
             telemetry = self.collector.collect_telemetry()
             return self._format_status(telemetry, self.hostname)
 
-        if command == "/info":
+        if cmd == "/info":
             return self._format_info(self.collector.collect_system_info(), self.hostname)
 
         resources = self.collector.collect_resources()
-        if command == "/cpu":
+        if cmd == "/cpu":
             return f"🧠 *CPU - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n• *Carga:* `{resources['cpu_load_percent']}%`\n• *Temperatura:* `{resources['cpu_temp_c']}°C`\n• *RAM:* `{float(resources['ram_used_percent']):.1f}%`"
-        if command == "/gpu":
+        
+        if cmd == "/gpu":
             gpu = resources.get("gpu", {})
             return f"🎮 *GPU - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n• *Temperatura:* `{gpu.get('temp_c', 'N/A')}°C`\n• *VRAM:* `{gpu.get('vram_used_mb', 0)} / {gpu.get('vram_total_mb', 0)} MB`\n• *Uso:* `{gpu.get('util_percent', 'N/A')}%`"
-        if command == "/disks":
+        
+        if cmd == "/disks":
             disks = self.collector.collect_disks()
             lines = [f"• *{name}:* `{make_bar(value)} {value}%` {get_status_icon(value)}" for name, value in disks.items()]
             return f"💾 *DISCOS - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines)
-        if command == "/docker":
+        
+        if cmd == "/docker":
             containers = self.collector.collect_containers()
             lines = [f"{'🟢' if data['running'] else '🔴'} *{name}:* `{data['status']}`" for name, data in containers.items()]
             return f"🐳 *DOCKER - {self.hostname}*\n━━━━━━━━━━━━━━━━━━━━\n" + ("\n".join(lines) or "Sin contenedores")
-        if command == "/wake":
+        
+        if cmd == "/wake":
             return f"🟢 Equipo `{self.hostname}` esta despierto."
+
+        # NUEVO BLOQUE OPENSRE
+        if cmd == "/sre":
+            if not args:
+                return "⚠️ Necesito contexto para investigar. Ejemplo: `/sre Revisa por qué el disco root está al 90%`"
+            return self._call_opensre_service(args)
              
         return f"*{self.hostname}:* comando no reconocido. Usa /help para ver los comandos disponibles."
 
+    def _call_opensre_service(self, query: str) -> str:
+        url = getattr(self.settings, "opensre_url", "http://opensre-api:8000/investigar")
+        
+        resources = self.collector.collect_resources()
+        disks = self.collector.collect_disks()
+        containers = self.collector.collect_containers()
+        
+        telemetry = {
+            "resources": resources,
+            "disks": disks,
+            "containers": containers
+        }
+        
+        # Le ordenamos a la IA que evite el formato conflictivo
+        prompt_enriquecido = (
+            f"Petición del usuario: {query}\n\n"
+            f"=== CONTEXTO DEL SERVIDOR (Telemetría) ===\n"
+            f"{json.dumps(telemetry, indent=2)}\n"
+            f"=========================================\n"
+            f"Analiza la petición utilizando la telemetría proporcionada. "
+            f"IMPORTANTE: Responde en TEXTO PLANO absoluto. No uses formato Markdown, negritas, ni asteriscos."
+        )
+        
+        try:
+            response = requests.post(url, json={"mensaje": prompt_enriquecido}, timeout=120)
+            
+            if response.status_code == 200:
+                data = response.json()
+                respuesta = strip_markdown(str(data.get("respuesta", "Sin respuesta clara.")))
+                return f"Análisis de OpenSRE:\n━━━━━━━━━━━━━━━━━━━━\n{respuesta}"
+            else:
+                return f"Error del motor SRE: Código {response.status_code}\nDetalle: {strip_markdown(response.text)}"
+        except requests.exceptions.Timeout:
+            return "OpenSRE ha excedido el tiempo de espera (120 segundos)."
+        except Exception as e:
+            return f"Fallo de conexión con el contenedor OpenSRE:\n{e}"
+        
     @staticmethod
     def _format_status(telemetry: dict[str, Any], hostname: str) -> str:
         resources = telemetry["resources"]
