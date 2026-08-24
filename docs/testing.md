@@ -47,13 +47,11 @@ El script `scripts/manual-test.py` permite invocar funciones del agente de forma
 
 ### Configuración
 
-Carga
+Lee y muestra la configuración efectiva cargada desde `.env`:
 
 ```bash
 python3 scripts/manual-test.py config
 ```
-
-Muestra la configuración efectiva cargada desde `.env`.
 
 ### Recolección de telemetría
 
