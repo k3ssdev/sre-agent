@@ -19,37 +19,57 @@ Agente autónomo de observabilidad y fiabilidad (SRE) para servidores Linux. Rec
 ## Arquitectura
 
 ```mermaid
-graph TD
-    Host["🖥️ Servidor Linux (host)"]
+flowchart LR
+    subgraph Host["Entorno Host"]
+        Proc["/proc · /sys · /dev"]
+        DockerRuntime["Docker socket"]
+        Nvidia["nvidia-smi"]
+    end
 
     subgraph Container["Contenedor Docker: sre-agent"]
-        Entrypoint["docker-entrypoint.sh"]
-        Agent["SREAgent\n(orquestador)"]
-        Collector["InfrastructureCollector\n(telemetría)"]
-        Alerts["AlertEvaluator\n(umbrales)"]
-        History["HistoryRepository\n(CSV)"]
-        Reporter["reporting.py\n(formato)"]
-        Bot["Telegram Bot\n(polling)"]
+        Entrypoint["Entrypoint"]
+        Agent["SREAgent"]
+        Collector["InfrastructureCollector"]
+        Alerts["AlertEvaluator"]
+        History["HistoryRepository"]
+        Reporter["Reporting"]
+        Bot["Telegram Bot"]
     end
 
     subgraph External["Servicios externos"]
-        Ollama["Ollama\n(LLM local)"]
+        Ollama["Ollama"]
         Telegram["API Telegram"]
     end
 
-    Host -- "/proc /sys /dev" --> Collector
-    Host -- "Docker socket" --> Collector
-    Host -- "nvidia-smi (nsenter)" --> Collector
+    Proc --> Collector
+    DockerRuntime --> Collector
+    Nvidia --> Collector
+
     Entrypoint --> Agent
     Entrypoint --> Bot
-    Agent --> Collector
-    Collector --> Alerts
+    Agent -->|control| Collector
+    Agent -->|control| Alerts
+    Collector -->|métricas| Alerts
     Alerts --> History
-    Alerts -->|"anomalía detectada"| Ollama
+    History --> Reporter
+
+    Alerts -- "anomalía detectada" --> Ollama
+    Agent --> Ollama
     Ollama --> Reporter
     Reporter --> Telegram
     Bot --> Agent
+    Bot --> Telegram
     Agent --> Telegram
+
+    classDef infra fill:#f3f4f6,stroke:#9ca3af,color:#111827,stroke-width:1px;
+    classDef internal fill:#ffffff,stroke:#6b7280,color:#111827,stroke-width:1px;
+    classDef external fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a,stroke-width:1px;
+    classDef anomaly fill:#fef2f2,stroke:#ef4444,color:#7f1d1d,stroke-width:2px;
+
+    class Proc,DockerRuntime,Nvidia infra;
+    class Entrypoint,Agent,Collector,History,Reporter,Bot internal;
+    class Ollama,Telegram external;
+    class Alerts anomaly;
 ```
 
 ---
@@ -59,28 +79,29 @@ graph TD
 ```mermaid
 flowchart TD
     Start([Inicio: docker-entrypoint.sh])
-    Start --> P1[Proceso: ciclo del agente\ncada 10 min]
+    Start --> P1[Proceso: ciclo de SREAgent\ncada 10 min]
     Start --> P2[Proceso: reporte diario\nHH:MM configurado]
-    Start --> P3[Proceso: bot Telegram\npolling continuo]
+    Start --> P3[Proceso: Telegram Bot\npolling continuo]
 
-    P1 --> Collect[Recopilar telemetría\ncpu · ram · gpu · discos · docker · smart]
+    P1 --> Collect[InfrastructureCollector\nrecopila telemetría]
     Collect --> Eval{¿Algún umbral\nsuperado?}
     Eval -- No --> Sleep[Esperar siguiente ciclo]
     Sleep --> Collect
-    Eval -- Sí --> SaveAlert[Guardar alerta\nen historial CSV]
-    SaveAlert --> Ollama[Enviar contexto\na Ollama]
-    Ollama --> Notify[Enviar alerta\na Telegram]
+    Eval -- Sí --> SaveAlert[AlertEvaluator\nregistra alerta]
+    SaveAlert --> Store[HistoryRepository\nguarda en CSV]
+    Store --> AskOllama[Enviar contexto\na Ollama]
+    AskOllama --> Notify[Reporting\nenvía alerta a Telegram]
     Notify --> Sleep
 
     P2 --> Wait[Esperar hora\nconfigurada]
-    Wait --> ReadCSV[Leer historial\n24 h desde CSV]
-    ReadCSV --> BuildReport[Generar reporte\ncon estadísticas]
+    Wait --> ReadCSV[HistoryRepository\nlee 24 h]
+    ReadCSV --> BuildReport[Reporting\ngenera estadísticas]
     BuildReport --> SendReport[Enviar reporte\na Telegram]
     SendReport --> Wait
 
     P3 --> BotPoll[Recibir comando\n/status /cpu /gpu …]
-    BotPoll --> RunCmd[Ejecutar comando\nen SREAgent]
-    RunCmd --> Reply[Responder\nen chat]
+    BotPoll --> RunCmd[SREAgent\nprocesa comando]
+    RunCmd --> Reply[Enviar respuesta\na Telegram]
     Reply --> BotPoll
 ```
 
