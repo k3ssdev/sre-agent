@@ -123,14 +123,14 @@ class SREAgent:
             "containers": containers
         }
         
-        # Le ordenamos a la IA que evite el formato conflictivo
         prompt_enriquecido = (
-            f"Petición del usuario: {query}\n\n"
-            f"=== CONTEXTO DEL SERVIDOR (Telemetría) ===\n"
+            f"Actúa como un Ingeniero SRE Senior. El usuario solicita la siguiente auditoría:\n"
+            f"'{query}'\n\n"
+            f"=== DATOS DE TELEMETRÍA ===\n"
             f"{json.dumps(telemetry, indent=2)}\n"
-            f"=========================================\n"
-            f"Analiza la petición utilizando la telemetría proporcionada. "
-            f"IMPORTANTE: Responde en TEXTO PLANO absoluto. No uses formato Markdown, negritas, ni asteriscos."
+            f"==============================\n"
+            f"Instrucciones: Analiza los datos, estructura el informe paso a paso y "
+            f"responde COMPLETAMENTE EN ESPAÑOL. No utilices caracteres especiales raros ni formato Markdown complejo."
         )
         
         try:
@@ -138,15 +138,18 @@ class SREAgent:
             
             if response.status_code == 200:
                 data = response.json()
-                respuesta = strip_markdown(str(data.get("respuesta", "Sin respuesta clara.")))
-                return f"Análisis de OpenSRE:\n━━━━━━━━━━━━━━━━━━━━\n{respuesta}"
+                respuesta = data.get('respuesta', 'Sin respuesta clara.')
+                
+                # ENVIAMOS TEXTO PLANO PURO (sin parse_mode Markdown para evitar errores 400)
+                # Devolvemos la cadena limpia
+                return f"Analisis SRE Profundo:\n----------------------------------------\n{respuesta}"
             else:
-                return f"Error del motor SRE: Código {response.status_code}\nDetalle: {strip_markdown(response.text)}"
+                return f"Error del motor SRE: Codigo {response.status_code}\nDetalle: {response.text}"
         except requests.exceptions.Timeout:
-            return "OpenSRE ha excedido el tiempo de espera (120 segundos)."
+            return "OpenSRE ha excedido el tiempo de espera (Timeout de 120s)."
         except Exception as e:
             return f"Fallo de conexión con el contenedor OpenSRE:\n{e}"
-        
+            
     @staticmethod
     def _format_status(telemetry: dict[str, Any], hostname: str) -> str:
         resources = telemetry["resources"]

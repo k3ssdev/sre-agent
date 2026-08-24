@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import re
 import requests
 
 from .agent import SREAgent
@@ -47,6 +48,53 @@ class TelegramBot:
                 print(f"Error consultando Telegram: {error}")
                 time.sleep(5)
 
+    @staticmethod
+    def format_markdown_v2(text: str) -> str:
+        escape_chars = r"\\_*\[\]()~`>#+\-=|{}.!"
+
+        def escape(value: str) -> str:
+            return re.sub(f"([{escape_chars}])", r"\\\1", value)
+
+        def format_inline(value: str) -> str:
+            replacements: dict[str, str] = {}
+
+            def keep(value_to_keep: str) -> str:
+                token = f"TGFORMAT{len(replacements)}TOKEN"
+                replacements[token] = value_to_keep
+                return token
+
+            value = re.sub(
+                r"`([^`\n]+)`",
+                lambda match: keep("`" + match.group(1).replace("\\", "\\\\").replace("`", "\\`") + "`"),
+                value,
+            )
+            value = re.sub(
+                r"\[([^\]\n]+)\]\(([^)\n]+)\)",
+                lambda match: keep(f"[{escape(match.group(1))}]({match.group(2).replace('\\', '\\\\').replace(')', '\\)')})"),
+                value,
+            )
+            value = re.sub(r"\*\*([^*\n]+)\*\*", lambda match: keep(f"*{escape(match.group(1))}*"), value)
+            value = re.sub(r"__([^_\n]+)__", lambda match: keep(f"_{escape(match.group(1))}_"), value)
+            formatted = escape(value)
+            for token, replacement in replacements.items():
+                formatted = formatted.replace(token, replacement)
+            return formatted
+
+        lines: list[str] = []
+        for line in text.splitlines():
+            heading = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", line)
+            bullet = re.match(r"^\s*[-+*]\s+(.+)$", line)
+            numbered = re.match(r"^\s*(\d+)\.\s+(.+)$", line)
+            if heading:
+                lines.append(f"*{format_inline(heading.group(1))}*")
+            elif bullet:
+                lines.append(f"• {format_inline(bullet.group(1))}")
+            elif numbered:
+                lines.append(f"{numbered.group(1)}\\. {format_inline(numbered.group(2))}")
+            else:
+                lines.append(format_inline(line))
+        return "\n".join(lines).strip()
+
     def _get_updates(self) -> list[dict[str, Any]]:
         url = f"https://api.telegram.org/bot{self.settings.telegram_token}/getUpdates"
         response = requests.get(url, params={"offset": self.offset, "timeout": 25}, timeout=35)
@@ -73,8 +121,14 @@ class TelegramBot:
         # if text == "/help":
         if command_word == "/help":
             response = f"🤖 *COMANDOS SRE - {get_hostname()}*\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(f"`{command}` - {description}" for command, description in COMMANDS.items())
+            parse_mode = "Markdown"
+        elif command_word == "/sre":
+            response = self.agent.command(full_text)
+            # Escapamos el texto para que Telegram no rechace caracteres sueltos en MarkdownV2
+            response = self.format_markdown_v2(response)
+            parse_mode = "MarkdownV2"
         else:
-            # response = self.agent.command(text)
-            response = self.agent.command(full_text)  # Pasamos todo el texto al comando, no solo la primera palabra
-        parse_mode = None if command_word == "/sre" else "Markdown"
+            response = self.agent.command(full_text)
+            parse_mode = "Markdown"
+            
         self.notifier.send_to_chat(chat_id, response, parse_mode=parse_mode)

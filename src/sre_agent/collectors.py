@@ -53,7 +53,14 @@ class InfrastructureCollector:
     def collect_containers() -> dict[str, dict[str, Any]]:
         try:
             client = docker.from_env()
-            return {container.name: {"status": container.status, "image": container.image.tags[0] if container.image.tags else "unknown", "running": container.status == "running"} for container in client.containers.list(all=True)}
+            containers: dict[str, dict[str, Any]] = {}
+            for container in client.containers.list(all=True):
+                containers[container.name] = {
+                    "status": container.status,
+                    "image": container.attrs.get("Config", {}).get("Image", "unknown"),
+                    "running": container.status == "running",
+                }
+            return containers
         except docker.errors.DockerException as error:
             print(f"Docker no disponible; se omite la comprobación de contenedores: {error}")
             return {}

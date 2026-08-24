@@ -41,6 +41,8 @@ services:
       - LLM_PROVIDER=ollama
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:latest}
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
