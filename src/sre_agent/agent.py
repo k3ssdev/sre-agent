@@ -252,13 +252,6 @@ class SREAgent:
         return "🔴 Fallo detectado" if smart_failed else "🟢 Todos saludables"
 
     @staticmethod
-    def _gpu_vram_used_mb(gpu: dict[str, Any]) -> int:
-        try:
-            return int(gpu.get("vram_used_mb", 0))
-        except (TypeError, ValueError):
-            return 0
-
-    @staticmethod
     def _format_plain_report(telemetry: dict[str, Any], verdict: str, hostname: str) -> str:
         resources = telemetry["resources"]
         ram_percent = float(resources.get("ram_used_percent", 0))
@@ -286,6 +279,10 @@ class SREAgent:
         resources, disks = telemetry["resources"], telemetry["disks"]
         ram_percent = float(resources.get("ram_used_percent", 0))
         gpu = resources.get("gpu", {})
+        try:
+            gpu_vram_used_mb = int(gpu.get("vram_used_mb", 0))
+        except (TypeError, ValueError):
+            gpu_vram_used_mb = 0
         history = SREAgent._format_history_section(telemetry.get("stats_24h"))
         docker_status = SREAgent._format_docker_summary(telemetry["containers"], indented=True)
         return f"""📊 *REPORTE DIARIO DEL SERVIDOR: {hostname}*
@@ -296,7 +293,7 @@ class SREAgent:
 • `RAM` `{make_bar(ram_percent)}` {ram_percent:.1f}% ({resources.get('ram_used_gb', 0)} GB)
 
 🎮 *GPU*
-• `Núcleo` {gpu.get('temp_c', 'N/A')}°C | `VRAM` {SREAgent._gpu_vram_used_mb(gpu)} MB
+• `Núcleo` {gpu.get('temp_c', 'N/A')}°C | `VRAM` {gpu_vram_used_mb} MB
 {history}
 
 💾 *ALMACENAMIENTO*

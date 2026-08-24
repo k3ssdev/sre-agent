@@ -39,12 +39,11 @@ class InvestigationClient:
 
     def investigate(
         self,
-        alert_reasons: list[str],
-        telemetry: dict[str, Any],
+        _alert_reasons: list[str],
+        _telemetry: dict[str, Any],
         prompt: str,
         fallback: str,
     ) -> str:
-        del alert_reasons, telemetry
         return self.ollama.ask(prompt, fallback)
 
     def ask(self, prompt: str, fallback: str) -> str:
