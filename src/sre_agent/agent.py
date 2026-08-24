@@ -118,9 +118,11 @@ class SREAgent:
             tools["file_search"] = lambda: buscar_archivo("flag.txt")
         tool_results = {name: tool() for name, tool in tools.items()}
         prompt = (
-            "Actúa como un Ingeniero SRE Senior. Responde completamente en español y "
-            "analiza únicamente los datos reales disponibles. Explica hallazgos, severidad "
-            "y acciones recomendadas sin inventar resultados.\n\n"
+            "Actúa como un Ingeniero SRE Senior. Responde completamente en español en "
+            "un máximo de 6 líneas. Usa solo estas secciones: Hallazgo, Severidad y "
+            "Acción. No repitas la consulta ni la telemetría, no incluyas saludos, "
+            "introducciones, despedidas o explicaciones genéricas. Analiza únicamente "
+            "los datos reales y no inventes resultados.\n\n"
             f"Consulta del usuario:\n{query}\n\n"
             f"Resultados de herramientas de solo lectura:\n{json.dumps(tool_results, ensure_ascii=False, indent=2)}"
         )

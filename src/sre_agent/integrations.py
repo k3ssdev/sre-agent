@@ -12,7 +12,18 @@ class OllamaClient:
         self.settings = settings
 
     def ask(self, prompt: str, fallback: str) -> str:
-        payload = {"model": self.settings.model_name, "prompt": prompt, "stream": False, "options": {"temperature": 0.2}}
+        concise_prompt = (
+            "Responde de forma directa y breve. Contesta solo lo que se pregunta, "
+            "sin saludos, introducciones, contexto repetido, conclusiones genéricas "
+            "ni texto de relleno. Prioriza datos, causa, impacto y acción.\n\n"
+            + prompt
+        )
+        payload = {
+            "model": self.settings.model_name,
+            "prompt": concise_prompt,
+            "stream": False,
+            "options": {"temperature": 0.1, "num_predict": 180},
+        }
         try:
             response = requests.post(self.settings.ollama_url, json=payload, timeout=60)
             return response.json().get("response", fallback)
