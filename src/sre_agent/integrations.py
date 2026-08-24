@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import requests
 
 from .config import Settings
@@ -33,10 +35,16 @@ class OllamaClient:
 
 class InvestigationClient:
     def __init__(self, settings: Settings) -> None:
-        self.settings = settings
         self.ollama = OllamaClient(settings)
 
-    def investigate(self, alert_reasons: list[str], telemetry: dict, prompt: str, fallback: str) -> str:
+    def investigate(
+        self,
+        alert_reasons: list[str],
+        telemetry: dict[str, Any],
+        prompt: str,
+        fallback: str,
+    ) -> str:
+        del alert_reasons, telemetry
         return self.ollama.ask(prompt, fallback)
 
     def ask(self, prompt: str, fallback: str) -> str:

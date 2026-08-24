@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
-import re
 import requests
 
 from .agent import SREAgent
@@ -107,28 +107,27 @@ class TelegramBot:
         chat_id = str(message.get("chat", {}).get("id", ""))
         if chat_id != self.settings.telegram_chat_id:
             return
-        
-        # text = message.get("text", "").split()[0].lower() if message.get("text") else ""
-        # if not text:
-        #     return
-        
-        full_text = message.get("text", "").strip() # Guardamos todo el texto
+
+        full_text = message.get("text", "").strip()
         if not full_text:
             return
-        
-        command_word = full_text.split()[0].lower()
-        
-        # if text == "/help":
-        if command_word == "/help":
-            response = f"🤖 *COMANDOS SRE - {get_hostname()}*\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(f"`{command}` - {description}" for command, description in COMMANDS.items())
-            parse_mode = "Markdown"
-        elif command_word == "/sre":
-            response = self.agent.command(full_text)
-            # Escapamos el texto para que Telegram no rechace caracteres sueltos en MarkdownV2
-            response = self.format_markdown_v2(response)
-            parse_mode = "MarkdownV2"
-        else:
-            response = self.agent.command(full_text)
-            parse_mode = "Markdown"
-            
+
+        response, parse_mode = self._build_command_response(full_text)
         self.notifier.send_to_chat(chat_id, response, parse_mode=parse_mode)
+
+    def _build_command_response(self, full_text: str) -> tuple[str, str]:
+        command_word = full_text.split()[0].lower()
+        if command_word == "/help":
+            return self._help_response(), "Markdown"
+
+        response = self.agent.command(full_text)
+        if command_word == "/sre":
+            return self.format_markdown_v2(response), "MarkdownV2"
+        return response, "Markdown"
+
+    @staticmethod
+    def _help_response() -> str:
+        return (
+            f"🤖 *COMANDOS SRE - {get_hostname()}*\n━━━━━━━━━━━━━━━━━━━━\n"
+            + "\n".join(f"`{command}` - {description}" for command, description in COMMANDS.items())
+        )

@@ -22,6 +22,13 @@ def agent() -> SREAgent:
             "util_percent": 20.0,
         },
     }
+    instance.collector.collect_telemetry.return_value = {
+        "resources": instance.collector.collect_resources.return_value,
+        "disks": {"root": 40},
+        "smart_health": {},
+        "containers": {},
+        "updates": {"pending_updates": 0},
+    }
     return instance
 
 
@@ -73,6 +80,19 @@ def test_docker_command_reports_empty_host(agent: SREAgent) -> None:
     response = agent.command("/docker")
 
     assert "Sin contenedores" in response
+
+
+def test_status_command_uses_collected_telemetry(agent: SREAgent) -> None:
+    agent.collector.collect_telemetry.return_value["containers"] = {
+        "web": {"running": False, "status": "exited"}
+    }
+
+    response = agent.command("/status")
+
+    assert "ESTADO DEL SERVIDOR: test-host" in response
+    assert "CON ALERTAS" in response
+    assert "Contenedores Docker:* `1`" in response
+    assert "Alertas:* `1`" in response
 
 
 def test_sre_command_uses_local_tools_and_ollama(agent: SREAgent, monkeypatch) -> None:

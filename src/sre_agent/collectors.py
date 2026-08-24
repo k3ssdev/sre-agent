@@ -17,7 +17,13 @@ import psutil
 class InfrastructureCollector:
     def collect_resources(self) -> dict[str, Any]:
         ram = self._memory_info()
-        return {"cpu_load_percent": psutil.cpu_percent(interval=1), "cpu_temp_c": self._cpu_temperature(), "ram_used_percent": ram["percent"], "ram_used_gb": round(ram["used"] / 1024**3, 2), "gpu": self._gpu_info()}
+        return {
+            "cpu_load_percent": psutil.cpu_percent(interval=1),
+            "cpu_temp_c": self._cpu_temperature(),
+            "ram_used_percent": ram["percent"],
+            "ram_used_gb": round(ram["used"] / 1024**3, 2),
+            "gpu": self._gpu_info(),
+        }
 
     @staticmethod
     def _cpu_temperature() -> float:
@@ -68,23 +74,29 @@ class InfrastructureCollector:
     def collect_system_info(self) -> dict[str, Any]:
         memory = self._memory_info()
         cpu_frequency = psutil.cpu_freq()
+        processor_model = self._processor_model()
+        containers = self.collect_containers()
         return {
             "system": {
                 "os": platform.platform(),
                 "kernel": platform.release(),
                 "architecture": platform.machine(),
-                "processor": self._processor_model(),
+                "processor": processor_model,
             },
             "cpu": {
-                "model": self._processor_model(),
+                "model": processor_model,
                 "physical_cores": psutil.cpu_count(logical=False) or 0,
                 "logical_cores": psutil.cpu_count(logical=True) or 0,
                 "frequency_mhz": round(cpu_frequency.max if cpu_frequency else 0),
             },
-            "memory": {"total_gb": round(memory["total"] / 1024**3, 2), "used_gb": round(memory["used"] / 1024**3, 2), "used_percent": memory["percent"]},
+            "memory": {
+                "total_gb": round(memory["total"] / 1024**3, 2),
+                "used_gb": round(memory["used"] / 1024**3, 2),
+                "used_percent": memory["percent"],
+            },
             "gpu": self._gpu_hardware_info(),
             "disks": self.collect_disks(),
-            "docker_containers": len(self.collect_containers()),
+            "docker_containers": len(containers),
         }
 
     @staticmethod
@@ -158,14 +170,36 @@ class InfrastructureCollector:
                     smartctl_command.insert(0, "sudo")
                 smart_output = subprocess.check_output(smartctl_command, stderr=subprocess.DEVNULL, text=True)
                 data = json.loads(smart_output)
-                reallocated = next((attribute.get("raw", {}).get("value", 0) for attribute in data.get("ata_smart_attributes", {}).get("table", []) if attribute.get("name") == "Reallocated_Sector_Ct"), 0)
-                report[disk] = {"device": device, "health_passed": data.get("smart_status", {}).get("passed", True), "temperature_c": data.get("temperature", {}).get("current"), "reallocated_sectors": reallocated}
+                reallocated = next(
+                    (
+                        attribute.get("raw", {}).get("value", 0)
+                        for attribute in data.get("ata_smart_attributes", {}).get("table", [])
+                        if attribute.get("name") == "Reallocated_Sector_Ct"
+                    ),
+                    0,
+                )
+                report[disk] = {
+                    "device": device,
+                    "health_passed": data.get("smart_status", {}).get("passed", True),
+                    "temperature_c": data.get("temperature", {}).get("current"),
+                    "reallocated_sectors": reallocated,
+                }
             except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
                 report[disk] = {"device": device, "error": f"Error leyendo SMART: {error}"}
         return report
 
-    def collect_telemetry(self, stats: dict[str, Any] | None = None) -> dict[str, Any]:
-        telemetry = {"resources": self.collect_resources(), "disks": self.collect_disks(), "smart_health": self.collect_smart(), "containers": self.collect_containers(), "updates": self.collect_updates()}
+    def collect_telemetry(
+        self,
+        stats: dict[str, Any] | None = None,
+        resources: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        telemetry = {
+            "resources": resources or self.collect_resources(),
+            "disks": self.collect_disks(),
+            "smart_health": self.collect_smart(),
+            "containers": self.collect_containers(),
+            "updates": self.collect_updates(),
+        }
         if stats is not None:
             telemetry["stats_24h"] = stats
         return telemetry
