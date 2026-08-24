@@ -4,3 +4,4 @@ secrets/telegram_token
 __pycache__/
 *.py[cod]
 uv.lock
+*.egg-info/
