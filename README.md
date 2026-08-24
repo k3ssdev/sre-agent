@@ -1,193 +1,174 @@
-# 🤖 Ollama SRE Agent
+# Ollama SRE Agent
 
-Agente autónomo de observabilidad y fiabilidad (SRE) para servidores Linux. Recopila telemetría de hardware, estado de almacenamiento (SMART), Docker y actualizaciones pendientes, integrando un LLM local en **Ollama** (`qwen2.5-coder:7b`) para diagnóstico de anomalías en tiempo real y generación de reportes diarios matutinos vía **Telegram**.
-
----
-
-## ⚡ Características
-
-- **Monitorización continua (10 min):** Chequeo pasivo de CPU, RAM, GPU (NVIDIA), almacenamiento, Docker y alertas de hardware SMART sin falsos positivos.
-- **Diagnóstico Inteligente Local:** Disparo automático de inferencia con Ollama únicamente ante métricas fuera de umbral o incidentes de infraestructura.
-- **Reporte Matutino Visual:** Resumen diario con métricas 24h (mínimos, máximos y medias), barras de progreso monoespaciadas y diagnóstico SRE.
-- **Persistencia local:** Historial CSV en un volumen Docker y ejecución continua mediante Docker Compose.
+Agente autónomo de observabilidad y fiabilidad (SRE) para servidores Linux. Recoge telemetría de hardware, estado de almacenamiento (SMART), contenedores Docker y actualizaciones pendientes. Integra un modelo de lenguaje local mediante **Ollama** (`qwen2.5-coder:latest`) para diagnosticar anomalías en tiempo real y enviar un reporte diario vía **Telegram**.
 
 ---
 
-## Requisitos
+## Características
 
-- Docker Compose
-- Ollama ejecutándose en el host
-- Token y chat ID de Telegram
-- Drivers NVIDIA instalados en el host para obtener datos de GPU
-
-El contenedor accede al socket Docker y a los dispositivos del host para
-recopilar métricas, SMART, discos y GPU.
+| Capacidad | Descripción |
+|---|---|
+| Monitorización continua | Ciclo de 10 minutos: CPU, RAM, GPU NVIDIA, discos, Docker y SMART |
+| Diagnóstico inteligente | Inferencia local con Ollama activada únicamente ante umbrales superados |
+| Reporte matutino | Resumen diario con estadísticas de 24 h (mín/máx/media) enviado a Telegram |
+| Bot de Telegram | Consultas bajo demanda mediante comandos de chat |
+| Persistencia local | Historial de métricas en CSV dentro de un volumen Docker |
 
 ---
 
-## 🛠️ Instalación y Configuración
+## Arquitectura
 
-## Configuración
+```mermaid
+graph TD
+    Host["🖥️ Servidor Linux (host)"]
 
-Configura el agente en `.env` a partir de `.env.example`:
+    subgraph Container["Contenedor Docker: sre-agent"]
+        Entrypoint["docker-entrypoint.sh"]
+        Agent["SREAgent\n(orquestador)"]
+        Collector["InfrastructureCollector\n(telemetría)"]
+        Alerts["AlertEvaluator\n(umbrales)"]
+        History["HistoryRepository\n(CSV)"]
+        Reporter["reporting.py\n(formato)"]
+        Bot["Telegram Bot\n(polling)"]
+    end
 
-```bash
-cp .env.example .env
+    subgraph External["Servicios externos"]
+        Ollama["Ollama\n(LLM local)"]
+        Telegram["API Telegram"]
+    end
+
+    Host -- "/proc /sys /dev" --> Collector
+    Host -- "Docker socket" --> Collector
+    Host -- "nvidia-smi (nsenter)" --> Collector
+    Entrypoint --> Agent
+    Entrypoint --> Bot
+    Agent --> Collector
+    Collector --> Alerts
+    Alerts --> History
+    Alerts -->|"anomalía detectada"| Ollama
+    Ollama --> Reporter
+    Reporter --> Telegram
+    Bot --> Agent
+    Agent --> Telegram
 ```
 
-El token de Telegram se gestiona como Docker Secret, no como variable de
-entorno. Crea el archivo local con el token nuevo generado por `@BotFather`:
+---
+
+## Flujo de ejecución
+
+```mermaid
+flowchart TD
+    Start([Inicio: docker-entrypoint.sh])
+    Start --> P1[Proceso: ciclo del agente\ncada 10 min]
+    Start --> P2[Proceso: reporte diario\nHH:MM configurado]
+    Start --> P3[Proceso: bot Telegram\npolling continuo]
+
+    P1 --> Collect[Recopilar telemetría\ncpu · ram · gpu · discos · docker · smart]
+    Collect --> Eval{¿Algún umbral\nsuperado?}
+    Eval -- No --> Sleep[Esperar siguiente ciclo]
+    Sleep --> Collect
+    Eval -- Sí --> SaveAlert[Guardar alerta\nen historial CSV]
+    SaveAlert --> Ollama[Enviar contexto\na Ollama]
+    Ollama --> Notify[Enviar alerta\na Telegram]
+    Notify --> Sleep
+
+    P2 --> Wait[Esperar hora\nconfigurada]
+    Wait --> ReadCSV[Leer historial\n24 h desde CSV]
+    ReadCSV --> BuildReport[Generar reporte\ncon estadísticas]
+    BuildReport --> SendReport[Enviar reporte\na Telegram]
+    SendReport --> Wait
+
+    P3 --> BotPoll[Recibir comando\n/status /cpu /gpu …]
+    BotPoll --> RunCmd[Ejecutar comando\nen SREAgent]
+    RunCmd --> Reply[Responder\nen chat]
+    Reply --> BotPoll
+```
+
+---
+
+## Comandos del bot
+
+| Comando | Descripción |
+|---|---|
+| `/status` | Estado general del servidor |
+| `/report` | Reporte diario bajo demanda |
+| `/cpu` | Carga de CPU, temperatura y RAM |
+| `/gpu` | Temperatura, VRAM y uso de GPU |
+| `/disks` | Uso de discos |
+| `/docker` | Estado de contenedores |
+| `/info` | Características del sistema y hardware |
+| `/sre <pregunta>` | Diagnóstico SRE con contexto enriquecido |
+| `/help` | Lista de comandos disponibles |
+
+---
+
+## Inicio rápido
+
+Consulta la guía completa en [`docs/installation.md`](docs/installation.md).
 
 ```bash
+# 1. Clonar y entrar al repositorio
+git clone https://github.com/k3ssdev/sre-agent.git
+cd sre-agent
+
+# 2. Crear el secret de Telegram
 mkdir -p secrets
 printf '%s' 'TOKEN_DE_TELEGRAM' > secrets/telegram_token
 chmod 600 secrets/telegram_token
-```
 
-El archivo `secrets/telegram_token` está excluido de Git. Si el token anterior
-quedó expuesto, revócalo primero desde `@BotFather`.
-
-Edita `.env` con tus valores:
-
-```dotenv
-SRE_PROVIDER=ollama
-OLLAMA_URL=http://localhost:11434/api/generate
-OLLAMA_MODEL=qwen2.5-coder:7b
-TELEGRAM_CHAT_ID=TU_CHAT_ID
-SRE_HISTORY_FILE=~/.config/server_metrics_history.csv
-REPORT_TIME=08:00
-```
-
-El fichero `.env` contiene configuración local y no debe versionarse. El token
-se lee dentro del contenedor desde `/run/secrets/telegram_token`.
-
-`SRE_PROVIDER` identifica el proveedor de análisis configurado. El agente usa
-Ollama directamente y los análisis `/sre` enriquecen la consulta con
-telemetría, sockets de red y búsquedas de archivos de solo lectura.
-
-El script está organizado por responsabilidades: `InfrastructureCollector` recopila telemetría, `HistoryRepository` persiste muestras, `AlertEvaluator` aplica umbrales, y `OllamaClient`/`TelegramNotifier` integran servicios externos. `SREAgent` coordina los casos de uso y `main()` solo procesa la CLI.
-
-Las alertas se envían a Telegram como texto plano con formato visual y sin Markdown. El reporte diario conserva su formato Markdown.
-
-El bot de Telegram permite consultar el servidor con estos comandos:
-
-```text
-/status        Estado general
-/report        Reporte diario
-/cpu           CPU, temperatura y RAM
-/gpu           Temperatura y uso de GPU
-/disks         Uso de discos
-/docker        Estado de contenedores
-/info          Características del sistema y hardware
-/help          Lista de comandos
-```
-
-## Ejecución
-
-Un único contenedor mantiene el bot activo, ejecuta las alertas cada 10 minutos
-y genera el reporte diario a las 08:00. La hora se puede cambiar con
-`REPORT_TIME` en `.env`.
-
-```bash
+# 3. Configurar variables de entorno
 cp .env.example .env
+# Editar .env con TELEGRAM_CHAT_ID y, si es necesario, OLLAMA_URL
+
+# 4. Arrancar
 docker compose up -d --build
 docker compose logs -f sre-agent
 ```
 
-El historial se guarda en el volumen `sre-history`. El contenedor usa acceso
-privilegiado y monta `/proc`, `/sys` y `/dev` porque recopila telemetría del
-host y consulta SMART. Si Ollama escucha en otra dirección, define
-`OLLAMA_URL` en `.env`; en Linux, el valor predeterminado apunta al host con
-`host.docker.internal`.
-
-Para detener los servicios:
-
-```bash
-docker compose down
-```
-
 ---
 
-## 🔍 Comprobación y Operación
-
-Para ejecutar el paquete localmente desde el layout `src`:
-
-```bash
-cd /ruta/donde/esta/clonado/sre-agent
-PYTHONPATH=src python3 -m sre_agent
-```
-
-Con `python3 -m` se usa el nombre del módulo `sre_agent` (con guion bajo), no `sre-agent`.
-
-- **Inspeccionar logs de los contenedores:**
-
-```bash
-docker compose logs -f sre-agent
-```
-
-### Pruebas automatizadas
-
-`pytest` se instala con `pipx`, pero cada aplicación mantiene su propio
-entorno aislado. Por eso se inyecta este proyecto en el entorno de pytest:
-
-```bash
-cd /home/alberto/Proyectos/sre-agent
-
-pipx inject pytest -e .
-
-pytest -q
-```
-
-La suite actual contiene seis pruebas unitarias en
-`tests/test_agent_commands.py`. Comprueba el formato de los comandos `/cpu`,
-`/gpu` y `/docker`, el comportamiento cuando no hay GPU o contenedores y el
-filtrado de muestras del historial de las últimas 24 horas. Las pruebas usan
-mocks y archivos temporales, por lo que no envían mensajes a Telegram ni
-necesitan consultar Ollama.
-
-### Pruebas manuales
-
-`manual-test.py` permite ejecutar funciones concretas sin iniciar el polling
-infinito del bot:
-
-```bash
-python3 scripts/manual-test.py config
-python3 scripts/manual-test.py collect
-python3 scripts/manual-test.py alerts
-python3 scripts/manual-test.py ollama
-# Desde el host, si .env usa host.docker.internal para el contenedor:
-python3 scripts/manual-test.py ollama --ollama-url http://localhost:11434/api/generate
-python3 scripts/manual-test.py command --command /status
-```
-
-Las pruebas de recolección necesitan las dependencias Python y, para consultar
-contenedores, un daemon Docker accesible.
-
----
-
-## 📂 Estructura del Repositorio
+## Estructura del repositorio
 
 ```text
 .
+├── docs/
+│   ├── installation.md           # Guía de instalación y puesta en marcha
+│   └── testing.md                # Guía de pruebas automatizadas y manuales
 ├── src/
 │   └── sre_agent/
-│       ├── __main__.py           # Entrada para python -m sre_agent
+│       ├── __main__.py           # Entrada: python -m sre_agent
 │       ├── cli.py                # Interfaz de línea de comandos
-│       ├── agent.py              # Casos de uso y orquestación
-│       ├── config.py             # Configuración y carga de .env
-│       ├── collectors.py         # Recolección de telemetría
-│       ├── history.py            # Persistencia de muestras CSV
+│       ├── agent.py              # Orquestación y casos de uso
+│       ├── config.py             # Carga de configuración y .env
+│       ├── collectors.py         # Recolección de telemetría del host
+│       ├── history.py            # Persistencia de muestras en CSV
 │       ├── alerts.py             # Evaluación de umbrales
 │       ├── integrations.py       # Clientes Ollama y Telegram
 │       └── reporting.py          # Formateo de reportes
-├── pyproject.toml                # Metadatos y dependencias del paquete
-├── .env.example                  # Plantilla de configuración
 ├── scripts/
-│   ├── docker-entrypoint.sh       # Ciclos del agente y reporte diario
-│   └── manual-test.py              # Ejecuta funciones manualmente
+│   ├── docker-entrypoint.sh      # Ciclos del agente y reporte diario
+│   └── manual-test.py            # Ejecución manual de funciones
+├── tests/
+│   └── test_agent_commands.py    # Suite de pruebas unitarias
+├── pyproject.toml                # Metadatos y dependencias del paquete
 ├── Dockerfile
-├── compose.yaml                   # Servicios y scheduling de Docker
-├── .gitignore
-└── README.md
-
+├── compose.yaml                  # Definición de servicios Docker
+├── .env.example                  # Plantilla de variables de entorno
+└── .gitignore
 ```
+
+---
+
+## Requisitos del sistema
+
+- Docker Engine ≥ 24 con Docker Compose
+- Ollama en ejecución en el host (puerto 11434)
+- Bot de Telegram y su token (`@BotFather`) y chat ID
+- Drivers NVIDIA instalados en el host (opcional, para métricas de GPU)
+
+---
+
+## Documentación adicional
+
+- [Instalación y puesta en marcha](docs/installation.md)
+- [Pruebas](docs/testing.md)
