@@ -13,7 +13,7 @@ class OllamaClient:
 
     def ask(self, prompt: str, fallback: str) -> str:
         concise_prompt = (
-            "Responde de forma directa y breve. Contesta solo lo que se pregunta, "
+            "Responde de forma directa y suficientemente detallada. Contesta solo lo que se pregunta, "
             "sin saludos, introducciones, contexto repetido, conclusiones genéricas "
             "ni texto de relleno. Prioriza datos, causa, impacto y acción.\n\n"
             + prompt
@@ -22,7 +22,7 @@ class OllamaClient:
             "model": self.settings.model_name,
             "prompt": concise_prompt,
             "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 180},
+            "options": {"temperature": 0.2, "num_predict": 500},
         }
         try:
             response = requests.post(self.settings.ollama_url, json=payload, timeout=60)
