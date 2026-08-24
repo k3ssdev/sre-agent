@@ -1,5 +1,7 @@
 services:
   sre-agent:
+    container_name: sre-agent
+    image: sre-agent-app
     build: .
     command: all
     env_file:

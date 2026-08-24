@@ -57,6 +57,7 @@ OPENSRE_COMMAND=~/.local/bin/opensre
 OPENSRE_TIMEOUT=120
 TELEGRAM_CHAT_ID=TU_CHAT_ID
 SRE_HISTORY_FILE=~/.config/server_metrics_history.csv
+REPORT_TIME=08:00
 ```
 
 El fichero `.env` contiene configuración local y no debe versionarse. El token
@@ -88,6 +89,8 @@ El bot de Telegram permite consultar el servidor con estos comandos:
 
 Un único contenedor mantiene el bot activo, ejecuta las alertas cada 10 minutos
 y genera el reporte diario a las 09:00.
+y genera el reporte diario a las 08:00. La hora se puede cambiar con
+`REPORT_TIME` en `.env`.
 
 ```bash
 cp .env.example .env

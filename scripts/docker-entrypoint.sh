@@ -9,11 +9,12 @@ run_agent() {
 }
 
 run_daily_report() {
+    report_time=${REPORT_TIME:-08:00}
     while :; do
         now=$(date +%s)
-        target=$(date -d 'today 09:00' +%s)
+        target=$(date -d "today $report_time" +%s)
         if [ "$target" -le "$now" ]; then
-            target=$(date -d 'tomorrow 09:00' +%s)
+            target=$(date -d "tomorrow $report_time" +%s)
         fi
         sleep "$((target - now))"
         sre-agent --daily-report || true
