@@ -88,7 +88,6 @@ El bot de Telegram permite consultar el servidor con estos comandos:
 ## Ejecución
 
 Un único contenedor mantiene el bot activo, ejecuta las alertas cada 10 minutos
-y genera el reporte diario a las 09:00.
 y genera el reporte diario a las 08:00. La hora se puede cambiar con
 `REPORT_TIME` en `.env`.
 
@@ -128,6 +127,26 @@ Con `python3 -m` se usa el nombre del módulo `sre_agent` (con guion bajo), no `
 ```bash
 docker compose logs -f sre-agent
 ```
+
+### Pruebas automatizadas
+
+`pytest` se instala con `pipx`, pero cada aplicación mantiene su propio
+entorno aislado. Por eso se inyecta este proyecto en el entorno de pytest:
+
+```bash
+cd /home/alberto/Proyectos/sre-agent
+
+pipx inject pytest -e .
+
+pytest -q
+```
+
+La suite actual contiene seis pruebas unitarias en
+`tests/test_agent_commands.py`. Comprueba el formato de los comandos `/cpu`,
+`/gpu` y `/docker`, el comportamiento cuando no hay GPU o contenedores y el
+filtrado de muestras del historial de las últimas 24 horas. Las pruebas usan
+mocks y archivos temporales, por lo que no envían mensajes a Telegram ni
+necesitan consultar Ollama.
 
 ### Pruebas manuales
 

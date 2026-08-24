@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from sre_agent.agent import SREAgent
+from sre_agent.history import HISTORY_HEADERS, HistoryRepository
 
 
 @pytest.fixture
@@ -72,3 +73,21 @@ def test_docker_command_reports_empty_host(agent: SREAgent) -> None:
     response = agent.command("/docker")
 
     assert "Sin contenedores" in response
+
+
+def test_history_returns_only_samples_from_last_24_hours(tmp_path, monkeypatch) -> None:
+    now = 1_000_000
+    history_file = tmp_path / "history.csv"
+    history_file.write_text(
+        ",".join(HISTORY_HEADERS)
+        + f"\n{now - 24 * 3600},10,40,50,45"
+        + f"\n{now - 24 * 3600 - 1},20,50,60,55"
+        + f"\n{now - 60},30,60,70,65\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sre_agent.history.time.time", lambda: now)
+
+    stats = HistoryRepository(history_file).get_last_24_hours()
+
+    assert stats is not None
+    assert stats["samples"] == 2

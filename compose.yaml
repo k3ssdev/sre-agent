@@ -10,6 +10,7 @@ services:
     environment:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
       NVIDIA_SMI_COMMAND: nsenter -t 1 -m /usr/bin/nvidia-smi
+      REPORT_TIME: ${REPORT_TIME:-08:00}
       SRE_HISTORY_FILE: /var/lib/sre-agent/server_metrics_history.csv
       TELEGRAM_TOKEN_FILE: /run/secrets/telegram_token
     extra_hosts:
@@ -24,6 +25,7 @@ services:
       - /dev:/dev
       - /:/host/root:ro
       - /etc/hostname:/host/etc/hostname:ro
+      - /etc/localtime:/etc/localtime:ro
       - sre-history:/var/lib/sre-agent
     secrets:
       - telegram_token
